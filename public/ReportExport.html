@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Rapport & Eksport</title>
+  <style>
+    body { font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin:0; padding:16px; background:#fff; color:#111 }
+    .container { max-width:1100px; margin:18px auto; }
+    .grid { display:grid; grid-template-columns: 1fr 320px; gap:18px }
+    .card { border:1px solid #e6e6e6; border-radius:10px; padding:14px; background:#fff }
+    h1 { margin:0 0 8px 0 }
+    .muted { color:#6b7280 }
+    .stats { display:grid; grid-template-columns: repeat(4,1fr); gap:12px; margin-bottom:12px }
+    .stat { padding:12px; border-radius:8px; background:#fafafa; text-align:center }
+    .actions { display:flex; flex-direction:column; gap:8px }
+    button { padding:10px 12px; border-radius:8px; border:1px solid #ddd; background:#fff; cursor:pointer }
+    .btn-primary { background:#0ea5a4; color:#fff; border:0 }
+    .textarea { width:100%; min-height:120px; padding:8px; border:1px solid #ddd; border-radius:6px }
+    .note { padding:10px; border-radius:8px; background:#fff7ed; border:1px solid #ffedd5 }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div style="margin-bottom:12px">
+      <h1>Rapport & Eksport</h1>
+      <div class="muted">Generer rapport og eksporter data</div>
+    </div>
+
+    <div class="grid">
+      <div>
+        <div class="card" id="projectSummary">
+          <h3>Projekt oversigt</h3>
+          <div id="projectInfo">Intet projekt valgt</div>
+        </div>
+
+        <div style="height:12px"></div>
+
+        <div class="card">
+          <h3>Nøgletal</h3>
+          <div class="stats" id="statsGrid">
+            <div class="stat"><div id="total">0</div><div class="muted">Totale målinger</div></div>
+            <div class="stat"><div id="average">0</div><div class="muted">Gennemsnit dBm</div></div>
+            <div class="stat"><div id="min">0</div><div class="muted">Minimum</div></div>
+            <div class="stat"><div id="max">0</div><div class="muted">Maksimum</div></div>
+          </div>
+
+          <div style="margin-top:12px">
+            <h4>Kommentarer & Noter</h4>
+            <textarea id="comments" class="textarea" placeholder="Tilføj kommentarer..."></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <div class="card">
+          <h4>Eksporter rapport</h4>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+            <button id="exportPdf">Eksporter som PDF</button>
+            <button id="exportPng">Eksporter som PNG</button>
+            <button id="exportJson">Eksporter som JSON</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h4>Anbefalinger</h4>
+          <div id="recommendations" class="note">Ingen data</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let project = null;
+    let floorPlan = null;
+    let measurements = [];
+
+    function calculateStats() {
+      if (!measurements || measurements.length === 0) return { total:0, average:0, min:0, max:0, excellent:0, good:0, poor:0, uniqueSSIDs:0, uniqueBSSIDs:0 };
+      const strengths = measurements.map(m => m.signalStrength || 0);
+      const total = strengths.length;
+      const avg = Math.round(strengths.reduce((a,b)=>a+b,0)/total);
+      const min = Math.min(...strengths);
+      const max = Math.max(...strengths);
+      const excellent = measurements.filter(m=>m.signalStrength>=-50).length;
+      const good = measurements.filter(m=>m.signalStrength>=-70 && m.signalStrength<-50).length;
+      const poor = measurements.filter(m=>m.signalStrength<-70).length;
+      const uniqueSSIDs = new Set(measurements.map(m=>m.ssid)).size;
+      const uniqueBSSIDs = new Set(measurements.map(m=>m.bssid)).size;
+      return { total, average:avg, min, max, excellent, good, poor, uniqueSSIDs, uniqueBSSIDs };
+    }
+
+    function render() {
+      const info = document.getElementById('projectInfo');
+      if (!project) {
+        info.innerHTML = '<div class="muted">Intet projekt valgt</div>';
+      } else {
+        info.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div><div class="muted">Projektnavn</div><div>${project.name||''}</div></div>
+          <div><div class="muted">Bygning</div><div>${project.building||''}</div></div>
+          <div><div class="muted">Status</div><div>${project.status||''}</div></div>
+          <div><div class="muted">Opdateret</div><div>${project.updatedAt? new Date(project.updatedAt).toLocaleDateString('da-DK') : ''}</div></div>
+          <div style="grid-column:1 / -1"><div class="muted">Beskrivelse</div><div>${project.description||''}</div></div>
+        </div>`;
+      }
+
+      const s = calculateStats();
+      document.getElementById('total').innerText = s.total;
+      document.getElementById('average').innerText = s.average + ' dBm';
+      document.getElementById('min').innerText = s.min + ' dBm';
+      document.getElementById('max').innerText = s.max + ' dBm';
+
+      const rec = document.getElementById('recommendations');
+      if (s.total === 0) rec.innerText = 'Ingen data';
+      else if (s.poor > s.total * 0.3) rec.innerText = `⚠️ Højt antal svage signaler (${Math.round((s.poor / s.total)*100)}%). Overvej flere access points.`;
+      else if (s.excellent > s.total * 0.7) rec.innerText = `✓ Fremragende dækning (${Math.round((s.excellent / s.total)*100)}%).`; else rec.innerText = 'ℹ️ Acceptabel dækning';
+    }
+
+    // Ask parent for data readiness
+    window.parent.postMessage({ type: 'report:ready' }, '*');
+
+    window.addEventListener('message', (ev) => {
+      const d = ev.data || {};
+      if (!d || !d.type) return;
+      if (d.type === 'report:setProject') { project = d.project; render(); }
+      if (d.type === 'report:setFloorPlan') { floorPlan = d.floorPlan; render(); }
+      if (d.type === 'report:setMeasurements') { measurements = d.measurements || []; render(); }
+      if (d.type === 'report:set') { project = d.project || project; floorPlan = d.floorPlan || floorPlan; measurements = d.measurements || measurements; render(); }
+    });
+
+    document.getElementById('exportJson').addEventListener('click', () => {
+      const data = { project, floorPlan, measurements, comments: document.getElementById('comments').value||'', exportedAt: new Date().toISOString() };
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = `${(project?.name || 'report').replace(/\s+/g,'-')}-report.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('exportPdf').addEventListener('click', () => { alert('PDF eksport kræver backend/service - placeholder'); });
+    document.getElementById('exportPng').addEventListener('click', () => { alert('PNG eksport kræver heatmap rendering - placeholder'); });
+  </script>
+</body>
+</html>

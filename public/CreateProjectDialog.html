@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Opret projekt</title>
+  <style>
+    body { font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin: 0; padding: 16px; background: #fff; color: #111 }
+    .container { max-width: 720px; margin: 24px auto; }
+    label { display:block; font-weight:600; margin-bottom:6px }
+    input, textarea { width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:6px; box-sizing: border-box }
+    .row { margin-bottom:12px }
+    .actions { display:flex; gap:8px; justify-content:flex-end }
+    button { padding:8px 12px; border-radius:6px; border:0; cursor:pointer }
+    .btn-primary { background:#0ea5a4; color:#fff }
+    .btn-ghost { background:transparent; border:1px solid #ddd }
+    .muted { color:#6b7280; font-size:13px }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Opret nyt projekt</h2>
+    <p class="muted">Indtast projektinformation for at komme i gang</p>
+    <form id="createForm">
+      <div class="row">
+        <label for="name">Projektnavn *</label>
+        <input id="name" name="name" required placeholder="f.eks. Kontorhus København" />
+      </div>
+      <div class="row">
+        <label for="building">Bygning *</label>
+        <input id="building" name="building" required placeholder="f.eks. Hovedkontor" />
+      </div>
+      <div class="row">
+        <label for="description">Beskrivelse</label>
+        <textarea id="description" name="description" rows="4" placeholder="Kort beskrivelse af projektet..."></textarea>
+      </div>
+      <div class="actions">
+        <button type="button" id="cancel" class="btn-ghost">Annuller</button>
+        <button type="submit" id="create" class="btn-primary">Opret projekt</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    // Notify parent that dialog is ready to receive any initial data
+    window.parent.postMessage({ type: 'createProject:ready' }, '*');
+
+    const form = document.getElementById('createForm');
+    const cancel = document.getElementById('cancel');
+
+    cancel.addEventListener('click', () => {
+      window.parent.postMessage({ type: 'createProject:cancel' }, '*');
+    });
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = document.getElementById('name').value.trim();
+      const building = document.getElementById('building').value.trim();
+      const description = document.getElementById('description').value.trim();
+      if (!name || !building) return alert('Udfyld venligst alle påkrævede felter');
+
+      const project = {
+        id: `p-${Date.now()}`,
+        name,
+        building,
+        description,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        status: 'draft',
+        measurements: []
+      };
+
+      window.parent.postMessage({ type: 'createProject:create', project }, '*');
+    });
+
+    // Optionally listen for initial props from parent (not used currently)
+    window.addEventListener('message', (ev) => {
+      const d = ev.data || {};
+      if (d && d.type === 'createProject:set') {
+        // Could populate form fields if parent sends defaults
+        if (d.project) {
+          try {
+            document.getElementById('name').value = d.project.name || '';
+            document.getElementById('building').value = d.project.building || '';
+            document.getElementById('description').value = d.project.description || '';
+          } catch (e) {}
+        }
+      }
+    });
+  </script>
+</body>
+</html>

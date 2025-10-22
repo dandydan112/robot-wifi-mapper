@@ -3,8 +3,7 @@ import { Home, Upload, MapPin, Activity, FileText } from 'lucide-react';
 // UploadCalibration is now provided as a static HTML page at /UploadCalibration.html embedded via iframe
 // MeasurementPoints is now provided as a static HTML page at /MeasurementPoints.html embedded via iframe
 // HeatmapView is now served as /HeatmapView.html and embedded via iframe
-import { ReportExport } from './components/ReportExport';
-import { CreateProjectDialog } from './components/CreateProjectDialog';
+// ReportExport is now served from public/ReportExport.html and embedded via iframe
 import { Toaster } from './components/ui/sonner';
 // mock data removed; projects will start empty. Use real data or Create Project dialog to add projects.
 import { Project, FloorPlan, Measurement } from './types';
@@ -74,6 +73,8 @@ export default function App() {
     const uploadIframeRef = useRef<HTMLIFrameElement | null>(null);
     const measurementsIframeRef = useRef<HTMLIFrameElement | null>(null);
     const heatmapIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const createDialogIframeRef = useRef<HTMLIFrameElement | null>(null);
+  const reportIframeRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
     // Send projects to iframe whenever they change
@@ -132,6 +133,7 @@ export default function App() {
     const handler = (ev: MessageEvent) => {
       const data = ev.data || {};
       if (data && data.type === 'dashboard:create') {
+        // open the create project dialog iframe
         setShowCreateDialog(true);
       }
       if (data && data.type === 'dashboard:select') {
@@ -173,6 +175,33 @@ export default function App() {
         if (hf && hf.contentWindow) {
           hf.contentWindow.postMessage({ type: 'heatmap:setFloorPlan', floorPlan: currentProject?.floorPlan || null }, '*');
           hf.contentWindow.postMessage({ type: 'heatmap:set', measurements: currentProject?.measurements || [] }, '*');
+        }
+      }
+
+      // Report iframe readiness
+      if (data && data.type === 'report:ready') {
+        const rf = reportIframeRef.current;
+        if (rf && rf.contentWindow) {
+          rf.contentWindow.postMessage({ type: 'report:set', project: currentProject, floorPlan: currentProject?.floorPlan || null, measurements: currentProject?.measurements || [] }, '*');
+        }
+      }
+
+      // CreateProjectDialog iframe events
+      if (data && data.type === 'createProject:create') {
+        if (data.project) {
+          handleCreateProject(data.project);
+          setShowCreateDialog(false);
+        }
+      }
+      if (data && data.type === 'createProject:cancel') {
+        setShowCreateDialog(false);
+      }
+      if (data && data.type === 'createProject:ready') {
+        // Optionally send any defaults; for now we don't have defaults to send
+        const cf = createDialogIframeRef.current;
+        if (cf && cf.contentWindow) {
+          // send an empty set message so iframe can populate if desired
+          cf.contentWindow.postMessage({ type: 'createProject:set', project: null }, '*');
         }
       }
     };
@@ -281,20 +310,30 @@ export default function App() {
           </div>
         )}
         {currentView === 'report' && currentProject && (
-          <ReportExport
-            project={currentProject}
-            floorPlan={currentProject.floorPlan}
-            measurements={currentProject.measurements}
-          />
+          <div className="flex-1 overflow-auto">
+            <iframe
+              title="ReportExport"
+              src="/ReportExport.html"
+              ref={reportIframeRef}
+              style={{ width: '100%', height: '100%', border: 0, minHeight: 600 }}
+            />
+          </div>
         )}
       </main>
 
-      {/* Create Project Dialog */}
-      <CreateProjectDialog
-        open={showCreateDialog}
-        onOpenChange={setShowCreateDialog}
-        onCreateProject={handleCreateProject}
-      />
+      {/* Create Project Dialog (now an iframe) */}
+      {showCreateDialog && (
+        <div style={{ position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', zIndex: 9999 }}>
+          <div style={{ width: 'min(900px, 96%)', maxHeight: '90vh', background: '#fff', borderRadius: 8, overflow: 'hidden', boxShadow: '0 8px 32px rgba(0,0,0,0.25)' }}>
+            <iframe
+              title="CreateProjectDialog"
+              src="/CreateProjectDialog.html"
+              ref={createDialogIframeRef}
+              style={{ width: '100%', height: '100%', border: 0, minHeight: 360 }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Toast Notifications */}
       <Toaster />
