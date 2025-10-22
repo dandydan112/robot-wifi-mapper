@@ -1,12 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Home, Upload, MapPin, Activity, FileText } from 'lucide-react';
-import { UploadCalibration } from './components/UploadCalibration';
-import { MeasurementPoints } from './components/MeasurementPoints';
-import { HeatmapView } from './components/HeatmapView';
+// UploadCalibration is now provided as a static HTML page at /UploadCalibration.html embedded via iframe
+// MeasurementPoints is now provided as a static HTML page at /MeasurementPoints.html embedded via iframe
+// HeatmapView is now served as /HeatmapView.html and embedded via iframe
 import { ReportExport } from './components/ReportExport';
 import { CreateProjectDialog } from './components/CreateProjectDialog';
 import { Toaster } from './components/ui/sonner';
-import { mockProjects, generateSampleMeasurements } from './lib/mockData';
+// mock data removed; projects will start empty. Use real data or Create Project dialog to add projects.
 import { Project, FloorPlan, Measurement } from './types';
 import { cn } from './components/ui/utils';
 
@@ -14,7 +14,7 @@ type View = 'dashboard' | 'upload' | 'measurements' | 'heatmap' | 'report';
 
 export default function App() {
   const [currentView, setCurrentView] = useState<View>('dashboard');
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [currentProject, setCurrentProject] = useState<Project | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
 
@@ -25,10 +25,7 @@ export default function App() {
   };
 
   const handleSelectProject = (project: Project) => {
-    // Add sample measurements for demo if completed or measuring
-    if (project.status !== 'draft' && project.measurements.length === 0) {
-      project.measurements = generateSampleMeasurements(30);
-    }
+    // Set the selected project and navigate to upload
     setCurrentProject(project);
     setCurrentView('upload');
   };
@@ -72,6 +69,116 @@ export default function App() {
     setCurrentProject(updatedProject);
     setProjects(projects.map(p => p.id === updatedProject.id ? updatedProject : p));
   };
+
+  const iframeRef = useRef<HTMLIFrameElement | null>(null);
+    const uploadIframeRef = useRef<HTMLIFrameElement | null>(null);
+    const measurementsIframeRef = useRef<HTMLIFrameElement | null>(null);
+    const heatmapIframeRef = useRef<HTMLIFrameElement | null>(null);
+
+  useEffect(() => {
+    // Send projects to iframe whenever they change
+    const iframe = iframeRef.current;
+    if (iframe && iframe.contentWindow) {
+      try {
+        iframe.contentWindow.postMessage({ type: 'dashboard:setProjects', projects }, '*');
+      } catch (err) {
+        // ignore
+      }
+    }
+  }, [projects]);
+
+  useEffect(() => {
+    // Send current floor plan to upload iframe when it changes
+    const iframe = uploadIframeRef.current;
+    if (iframe && iframe.contentWindow) {
+      try {
+        iframe.contentWindow.postMessage({ type: 'upload:setFloorPlan', floorPlan: currentProject?.floorPlan || null }, '*');
+      } catch (err) {
+        // ignore
+      }
+    }
+    // Also send floorPlan + measurements to measurements iframe
+    const mframe = measurementsIframeRef.current;
+    if (mframe && mframe.contentWindow) {
+      try {
+        mframe.contentWindow.postMessage({ type: 'measurements:setFloorPlan', floorPlan: currentProject?.floorPlan || null }, '*');
+        mframe.contentWindow.postMessage({ type: 'measurements:set', measurements: currentProject?.measurements || [] }, '*');
+      } catch (err) { }
+    }
+    const hframe = heatmapIframeRef.current;
+    if (hframe && hframe.contentWindow) {
+      try {
+        hframe.contentWindow.postMessage({ type: 'heatmap:setFloorPlan', floorPlan: currentProject?.floorPlan || null }, '*');
+        hframe.contentWindow.postMessage({ type: 'heatmap:set', measurements: currentProject?.measurements || [] }, '*');
+      } catch (err) {}
+    }
+  }, [currentProject?.floorPlan]);
+
+  useEffect(() => {
+    // Send measurements to measurements iframe when they change
+    const mframe = measurementsIframeRef.current;
+    if (mframe && mframe.contentWindow) {
+      try {
+        mframe.contentWindow.postMessage({ type: 'measurements:set', measurements: currentProject?.measurements || [] }, '*');
+      } catch (err) { }
+    }
+    const hframe = heatmapIframeRef.current;
+    if (hframe && hframe.contentWindow) {
+      try { hframe.contentWindow.postMessage({ type: 'heatmap:set', measurements: currentProject?.measurements || [] }, '*'); } catch (err) {}
+    }
+  }, [currentProject?.measurements]);
+
+  useEffect(() => {
+    const handler = (ev: MessageEvent) => {
+      const data = ev.data || {};
+      if (data && data.type === 'dashboard:create') {
+        setShowCreateDialog(true);
+      }
+      if (data && data.type === 'dashboard:select') {
+        const p = data.project;
+        if (p) handleSelectProject(p);
+      }
+      // Upload iframe events
+      if (data && data.type === 'upload:floorPlanUploaded') {
+        if (data.floorPlan) handleFloorPlanUploaded(data.floorPlan);
+      }
+      if (data && data.type === 'upload:next') {
+        setCurrentView('measurements');
+      }
+      if (data && data.type === 'upload:ready') {
+        // iframe asked for current data; send it
+        const up = uploadIframeRef.current;
+        if (up && up.contentWindow) up.contentWindow.postMessage({ type: 'upload:setFloorPlan', floorPlan: currentProject?.floorPlan || null }, '*');
+      }
+
+      // Measurements iframe events
+      if (data && data.type === 'measurement:add') {
+        if (data.measurement) handleAddMeasurement(data.measurement);
+      }
+      if (data && data.type === 'measurement:update') {
+        if (data.id && data.measurement) handleUpdateMeasurement(data.id, data.measurement);
+      }
+      if (data && data.type === 'measurement:delete') {
+        if (data.id) handleDeleteMeasurement(data.id);
+      }
+      if (data && data.type === 'measurements:ready') {
+        const mf = measurementsIframeRef.current;
+        if (mf && mf.contentWindow) {
+          mf.contentWindow.postMessage({ type: 'measurements:setFloorPlan', floorPlan: currentProject?.floorPlan || null }, '*');
+          mf.contentWindow.postMessage({ type: 'measurements:set', measurements: currentProject?.measurements || [] }, '*');
+        }
+      }
+      if (data && data.type === 'heatmap:ready') {
+        const hf = heatmapIframeRef.current;
+        if (hf && hf.contentWindow) {
+          hf.contentWindow.postMessage({ type: 'heatmap:setFloorPlan', floorPlan: currentProject?.floorPlan || null }, '*');
+          hf.contentWindow.postMessage({ type: 'heatmap:set', measurements: currentProject?.measurements || [] }, '*');
+        }
+      }
+    };
+    window.addEventListener('message', handler, false);
+    return () => window.removeEventListener('message', handler);
+  }, [handleSelectProject]);
 
   const navigationItems = [
     { id: 'dashboard' as View, label: 'Dashboard', icon: Home },
@@ -133,49 +240,45 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-1 overflow-hidden">
         {currentView === 'dashboard' && (
-          // Embed the static HTML dashboard. We expose handlers via window so the HTML
-          // page can call back into the app when needed.
+          // Embed the static HTML dashboard. Use postMessage for robust cross-window comms.
           <div className="flex-1 overflow-auto">
             <iframe
               title="Dashboard"
               src="/Dashboard.html"
+              ref={iframeRef}
               style={{ width: '100%', height: '100%', border: '0', minHeight: 600 }}
-              onLoad={(e) => {
-                try {
-                  const w = (e.currentTarget as HTMLIFrameElement).contentWindow as any;
-                  if (w) {
-                    w.PROJECTS = projects;
-                    w.onCreateProject = () => setShowCreateDialog(true);
-                    w.onSelectProject = (p: any) => handleSelectProject(p);
-                  }
-                } catch (err) {
-                  // cross-origin or path issues may prevent access; then iframe becomes read-only
-                }
-              }}
             />
           </div>
         )}
         {currentView === 'upload' && currentProject && (
-          <UploadCalibration
-            onFloorPlanUploaded={handleFloorPlanUploaded}
-            onNext={() => setCurrentView('measurements')}
-            currentFloorPlan={currentProject.floorPlan}
-          />
+          <div className="flex-1 overflow-auto">
+            <iframe
+              title="UploadCalibration"
+              src="/UploadCalibration.html"
+              ref={uploadIframeRef}
+              style={{ width: '100%', height: '100%', border: 0, minHeight: 600 }}
+            />
+          </div>
         )}
         {currentView === 'measurements' && currentProject && (
-          <MeasurementPoints
-            floorPlan={currentProject.floorPlan}
-            measurements={currentProject.measurements}
-            onAddMeasurement={handleAddMeasurement}
-            onUpdateMeasurement={handleUpdateMeasurement}
-            onDeleteMeasurement={handleDeleteMeasurement}
-          />
+          <div className="flex-1 overflow-auto">
+            <iframe
+              title="MeasurementPoints"
+              src="/MeasurementPoints.html"
+              ref={measurementsIframeRef}
+              style={{ width: '100%', height: '100%', border: 0, minHeight: 600 }}
+            />
+          </div>
         )}
         {currentView === 'heatmap' && currentProject && (
-          <HeatmapView
-            floorPlan={currentProject.floorPlan}
-            measurements={currentProject.measurements}
-          />
+          <div className="flex-1 overflow-auto">
+            <iframe
+              title="HeatmapView"
+              src="/HeatmapView.html"
+              ref={heatmapIframeRef}
+              style={{ width: '100%', height: '100%', border: 0, minHeight: 600 }}
+            />
+          </div>
         )}
         {currentView === 'report' && currentProject && (
           <ReportExport

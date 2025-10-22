@@ -42,7 +42,7 @@
           <div>
             <div style="font-size:12px;">Totale projekter</div>
           </div>
-          <div aria-hidden>🏢</div>
+          <div aria-hidden></div>
         </div>
         <div class="card-content">
           <div id="totalProjects" style="font-size:20px;">0</div>
@@ -54,7 +54,7 @@
           <div>
             <div style="font-size:12px;">Aktive målinger</div>
           </div>
-          <div aria-hidden>⚡</div>
+          <div aria-hidden></div>
         </div>
         <div class="card-content">
           <div id="activeMeasurements" style="font-size:20px;">0</div>
@@ -66,7 +66,7 @@
           <div>
             <div style="font-size:12px;">Færdige projekter</div>
           </div>
-          <div aria-hidden>📅</div>
+          <div aria-hidden></div>
         </div>
         <div class="card-content">
           <div id="completedProjects" style="font-size:20px;">0</div>
@@ -103,8 +103,14 @@
 
   <script>
     (function () {
-      // Read projects from global window.PROJECTS if present
-      const projects = window.PROJECTS || [];
+      // Projects state will be set via postMessage from the parent window.
+      let projects = [];
+
+      // Safe setter that re-renders the UI when projects change
+      function setProjects(p) {
+        projects = Array.isArray(p) ? p : [];
+        renderAll();
+      }
 
       function parseDate(d) {
         if (!d) return '';
@@ -131,18 +137,23 @@
         }
       }
 
-      // Stats
-      document.getElementById('totalProjects').textContent = projects.length;
-      document.getElementById('activeMeasurements').textContent = projects.filter(p => p.status === 'measuring').length;
-      document.getElementById('completedProjects').textContent = projects.filter(p => p.status === 'completed').length;
-
-      // Projects grid
+      // Projects grid rendering utilities
       const grid = document.getElementById('projectsGrid');
       const tpl = document.getElementById('projectCardTpl');
 
-      if (projects.length === 0) {
-        grid.innerHTML = '<p class="muted">Ingen projekter at vise.</p>';
-      } else {
+      function renderAll() {
+        // Stats
+        document.getElementById('totalProjects').textContent = String(projects.length);
+        document.getElementById('activeMeasurements').textContent = String(projects.filter(p => p.status === 'measuring').length);
+        document.getElementById('completedProjects').textContent = String(projects.filter(p => p.status === 'completed').length);
+
+        // Projects grid
+        grid.innerHTML = '';
+        if (!projects || projects.length === 0) {
+          grid.innerHTML = '<p class="muted">Ingen projekter at vise.</p>';
+          return;
+        }
+
         projects.forEach(project => {
           const node = tpl.content.cloneNode(true);
           const wrapper = node.querySelector('.card');
@@ -160,22 +171,43 @@
           updated.textContent = project.updatedAt ? parseDate(project.updatedAt) : '';
 
           wrapper.addEventListener('click', function () {
-            if (typeof window.onSelectProject === 'function') window.onSelectProject(project);
+            // Send select event to parent
+            if (window.parent && typeof window.parent.postMessage === 'function') {
+              window.parent.postMessage({ type: 'dashboard:select', project }, '*');
+            }
           });
 
           grid.appendChild(node);
         });
       }
 
-      // Create button
+      // Create button sends event to parent
       document.getElementById('createBtn').addEventListener('click', function () {
-        if (typeof window.onCreateProject === 'function') {
-          window.onCreateProject();
+        if (window.parent && typeof window.parent.postMessage === 'function') {
+          window.parent.postMessage({ type: 'dashboard:create' }, '*');
         } else {
-          alert('Create project handler not provided.');
+          alert('Create project handler not available.');
         }
       });
 
+      // Listen for messages from parent
+      window.addEventListener('message', function (ev) {
+        try {
+          const msg = ev.data || {};
+          if (msg && msg.type === 'dashboard:setProjects') {
+            setProjects(msg.projects || []);
+          }
+        } catch (err) {
+          // ignore malformed messages
+        }
+      }, false);
+
+      // If parent provided initial projects via window.PROJECTS (backwards compatibility), use them
+      if (window.PROJECTS && Array.isArray(window.PROJECTS)) {
+        setProjects(window.PROJECTS);
+      } else {
+        renderAll();
+      }
     })();
   </script>
 </body>

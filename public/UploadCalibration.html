@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Upload & Kalibrering</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; margin: 0; }
+    .container { max-width: 900px; margin: 0 auto; padding: 24px; }
+    .grid { display: grid; gap: 16px; }
+    @media (min-width: 1024px) { .lg\:grid-cols-2 { grid-template-columns: 1fr 1fr; } }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; background: white; }
+    .card-header { padding: 12px 16px; border-bottom: 1px solid #f3f4f6; }
+    .card-content { padding: 16px; }
+    .muted { color:#6b7280; }
+    .btn { padding:8px 12px; border-radius:6px; border:1px solid #ccc; background:white; cursor:pointer; }
+    .btn-primary { background:#0ea5a9; color:white; border:none; }
+    .hidden { display:none; }
+    .preview { border-radius:6px; overflow:hidden; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="mb-6">
+      <h1 class="mb-2">Upload & Kalibrering</h1>
+      <p class="muted">Upload plantegning og definer målestok</p>
+    </div>
+
+    <div class="grid lg:grid-cols-2">
+      <div class="card">
+        <div class="card-header">
+          <strong>Upload plantegning</strong>
+          <div class="muted">Understøttede formater: PDF, PNG, SVG, JPG</div>
+        </div>
+        <div class="card-content">
+          <input id="fileInput" class="hidden" type="file" accept=".pdf,.png,.svg,.jpg,.jpeg" />
+          <div style="margin-bottom:12px;">
+            <button id="chooseBtn" class="btn btn-outline" style="width:100%; height:96px; border:dashed 2px #cbd5e1; display:flex; align-items:center; justify-content:center;">
+              <div style="text-align:center;">
+                <div style="font-size:24px;">⬆️</div>
+                <div>Klik for at vælge fil eller træk og slip her</div>
+                <div class="muted" style="font-size:12px;">eller træk og slip her</div>
+              </div>
+            </button>
+          </div>
+
+          <div id="fileInfo" style="display:none;" class="muted" style="margin-bottom:8px;"></div>
+
+          <div style="margin-bottom:12px;">
+            <label for="scale">Målestok (pixels pr. meter)</label>
+            <input id="scale" type="number" value="100" style="width:100%; padding:8px; margin-top:6px;" />
+            <p class="muted" style="font-size:12px;">Definer hvor mange pixels der svarer til 1 meter i virkeligheden</p>
+          </div>
+
+          <div style="display:flex; gap:8px;">
+            <button id="saveBtn" class="btn btn-primary" disabled>Gem plantegning</button>
+            <button id="nextBtn" class="btn" style="display:none;">Næste: Målepunkter →</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <strong>Preview</strong>
+          <div class="muted">Forhåndsvisning af uploadet plantegning</div>
+        </div>
+        <div class="card-content">
+          <div id="previewArea">
+            <div style="border:1px dashed #cbd5e1; border-radius:6px; height:320px; display:flex; align-items:center; justify-content:center;">
+              <div style="text-align:center; color: #9ca3af;">
+                <div style="font-size:36px;">🖼️</div>
+                <p>Ingen plantegning uploadet</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;" class="card">
+      <div class="card-header"><strong>Kalibreringsvejledning</strong></div>
+      <div class="card-content">
+        <ol class="muted" style="padding-left:18px;">
+          <li>Upload en klar plantegning af bygningen</li>
+          <li>Identificer en kendt distance på plantegningen (f.eks. en væg)</li>
+          <li>Mål længden i pixels og den faktiske længde i meter</li>
+          <li>Beregn målestoksforholdet (pixels / meter)</li>
+          <li>Indtast værdien i feltet ovenfor</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      let currentFloorPlan = null;
+      const fileInput = document.getElementById('fileInput');
+      const chooseBtn = document.getElementById('chooseBtn');
+      const saveBtn = document.getElementById('saveBtn');
+      const nextBtn = document.getElementById('nextBtn');
+      const previewArea = document.getElementById('previewArea');
+      const scaleInput = document.getElementById('scale');
+      const fileInfo = document.getElementById('fileInfo');
+
+      chooseBtn.addEventListener('click', function(){ fileInput.click(); });
+
+      fileInput.addEventListener('change', function(e){
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(ev){
+          const url = ev.target.result;
+          renderPreview(url);
+          fileInfo.style.display = 'block';
+          fileInfo.textContent = file.name;
+          saveBtn.disabled = false;
+          nextBtn.style.display = 'none';
+          currentFloorPlan = { id: 'fp-'+Date.now(), fileName: file.name, imageUrl: url };
+        };
+        reader.readAsDataURL(file);
+      });
+
+      function renderPreview(url) {
+        previewArea.innerHTML = '';
+        const img = document.createElement('img');
+        img.src = url;
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+        img.className = 'preview';
+        previewArea.appendChild(img);
+      }
+
+      saveBtn.addEventListener('click', function(){
+        const url = currentFloorPlan && currentFloorPlan.imageUrl;
+        if (!url) return;
+        const scaleVal = parseFloat(scaleInput.value) || 100;
+        const floorPlan = {
+          id: currentFloorPlan.id,
+          fileName: currentFloorPlan.fileName,
+          fileType: (currentFloorPlan.fileName || '').toLowerCase().endsWith('.pdf') ? 'pdf' : 'png',
+          imageUrl: url,
+          width: 1000,
+          height: 700,
+          scale: { pixelsPerMeter: scaleVal, referencePoints: [] }
+        };
+        // send to parent
+        if (window.parent && typeof window.parent.postMessage === 'function') {
+          window.parent.postMessage({ type: 'upload:floorPlanUploaded', floorPlan }, '*');
+          // show next button
+          nextBtn.style.display = 'inline-flex';
+        } else {
+          alert('Parent window not available');
+        }
+      });
+
+      nextBtn.addEventListener('click', function(){
+        if (window.parent && typeof window.parent.postMessage === 'function') {
+          window.parent.postMessage({ type: 'upload:next' }, '*');
+        }
+      });
+
+      // Listen for messages from parent
+      window.addEventListener('message', function(ev){
+        try {
+          const msg = ev.data || {};
+          if (msg && msg.type === 'upload:setFloorPlan') {
+            const fp = msg.floorPlan;
+            if (!fp) {
+              // clear
+              currentFloorPlan = null;
+              previewArea.innerHTML = '<div style="border:1px dashed #cbd5e1; border-radius:6px; height:320px; display:flex; align-items:center; justify-content:center;"><div style="text-align:center; color: #9ca3af;"><div style="font-size:36px;">🖼️</div><p>Ingen plantegning uploadet</p></div></div>';
+              fileInfo.style.display = 'none';
+              saveBtn.disabled = true;
+              nextBtn.style.display = 'none';
+              scaleInput.value = '100';
+            } else {
+              currentFloorPlan = fp;
+              renderPreview(fp.imageUrl);
+              fileInfo.style.display = 'block';
+              fileInfo.textContent = fp.fileName || '';
+              saveBtn.disabled = false;
+              nextBtn.style.display = 'inline-flex';
+              scaleInput.value = (fp.scale && fp.scale.pixelsPerMeter) ? String(fp.scale.pixelsPerMeter) : '100';
+            }
+          }
+        } catch (err) {
+          // ignore
+        }
+      }, false);
+
+      // Request initial data from parent (parent should send upload:setFloorPlan on currentProject change)
+      if (window.parent && typeof window.parent.postMessage === 'function') {
+        window.parent.postMessage({ type: 'upload:ready' }, '*');
+      }
+
+    })();
+  </script>
+</body>
+</html>
