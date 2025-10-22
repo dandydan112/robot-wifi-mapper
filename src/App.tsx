@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { Home, Upload, MapPin, Activity, FileText } from 'lucide-react';
-import { Dashboard } from './components/Dashboard';
 import { UploadCalibration } from './components/UploadCalibration';
 import { MeasurementPoints } from './components/MeasurementPoints';
 import { HeatmapView } from './components/HeatmapView';
@@ -134,11 +133,27 @@ export default function App() {
       {/* Main Content */}
       <main className="flex-1 overflow-hidden">
         {currentView === 'dashboard' && (
-          <Dashboard
-            projects={projects}
-            onCreateProject={() => setShowCreateDialog(true)}
-            onSelectProject={handleSelectProject}
-          />
+          // Embed the static HTML dashboard. We expose handlers via window so the HTML
+          // page can call back into the app when needed.
+          <div className="flex-1 overflow-auto">
+            <iframe
+              title="Dashboard"
+              src="/Dashboard.html"
+              style={{ width: '100%', height: '100%', border: '0', minHeight: 600 }}
+              onLoad={(e) => {
+                try {
+                  const w = (e.currentTarget as HTMLIFrameElement).contentWindow as any;
+                  if (w) {
+                    w.PROJECTS = projects;
+                    w.onCreateProject = () => setShowCreateDialog(true);
+                    w.onSelectProject = (p: any) => handleSelectProject(p);
+                  }
+                } catch (err) {
+                  // cross-origin or path issues may prevent access; then iframe becomes read-only
+                }
+              }}
+            />
+          </div>
         )}
         {currentView === 'upload' && currentProject && (
           <UploadCalibration
