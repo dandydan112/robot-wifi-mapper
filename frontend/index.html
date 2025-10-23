@@ -1,0 +1,106 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WiFi Coverage Analysis App</title>
+  <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Top Navigation -->
+    <header class="header">
+      <div class="container">
+        <div class="header-content">
+          <div class="logo-section">
+            <div class="logo-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+              </svg>
+            </div>
+            <div>
+              <h1>WiFi Coverage Analyzer</h1>
+              <p id="project-name" class="project-name hidden"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Secondary Navigation -->
+    <nav class="nav">
+      <div class="container">
+        <div class="nav-items">
+          <button id="nav-dashboard" class="nav-item active" data-view="dashboard">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9,22 9,12 15,12 15,22"></polyline>
+            </svg>
+            <span>Dashboard</span>
+          </button>
+          <button id="nav-upload" class="nav-item" data-view="upload" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="7,10 12,15 17,10"></polyline>
+              <line x1="12" y1="15" x2="12" y2="3"></line>
+            </svg>
+            <span>Upload & Kalibrering</span>
+          </button>
+          <button id="nav-measurements" class="nav-item" data-view="measurements" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+              <circle cx="12" cy="10" r="3"></circle>
+            </svg>
+            <span>Målepunkter</span>
+          </button>
+          <button id="nav-heatmap" class="nav-item" data-view="heatmap" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+            </svg>
+            <span>Heatmap</span>
+          </button>
+          <button id="nav-report" class="nav-item" data-view="report" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14,2 14,8 20,8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10,9 9,9 8,9"></polyline>
+            </svg>
+            <span>Rapport & Eksport</span>
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main id="main-content" class="main-content">
+      <div id="view-dashboard" class="view active">
+        <iframe id="dashboard-iframe" title="Dashboard" src="/Dashboard.html"></iframe>
+      </div>
+      <div id="view-upload" class="view">
+        <iframe id="upload-iframe" title="UploadCalibration" src="/UploadCalibration.html"></iframe>
+      </div>
+      <div id="view-measurements" class="view">
+        <iframe id="measurements-iframe" title="MeasurementPoints" src="/MeasurementPoints.html"></iframe>
+      </div>
+      <div id="view-heatmap" class="view">
+        <iframe id="heatmap-iframe" title="HeatmapView" src="/HeatmapView.html"></iframe>
+      </div>
+      <div id="view-report" class="view">
+        <iframe id="report-iframe" title="ReportExport" src="/ReportExport.html"></iframe>
+      </div>
+    </main>
+
+    <!-- Create Project Dialog -->
+    <div id="create-dialog" class="dialog-overlay hidden">
+      <div class="dialog-content">
+        <iframe id="create-dialog-iframe" title="CreateProjectDialog" src="/CreateProjectDialog.html"></iframe>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/js/script.js"></script>
+</body>
+</html>  

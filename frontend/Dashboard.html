@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard</title>
+  <!-- This file mirrors the structure of the React component `Dashboard.tsx` as static HTML.
+       It expects a global `window.PROJECTS` array (each project object matching the app's shape).
+       If `window.onCreateProject` or `window.onSelectProject` are defined, they'll be called
+       when the user clicks the corresponding UI elements. -->
+  <style>
+    /* Minimal reset for standalone preview; styles mostly come from project Tailwind classes
+       when embedding this HTML into the app. */
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; margin: 0; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px max-height: 1200px; }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; background: white; }
+    .card-header { padding: 12px 16px; border-bottom: 1px solid #f3f4f6; display:flex; align-items:center; justify-content:space-between }
+    .card-content { padding: 16px; }
+    .badge { padding: 4px 8px; border-radius: 9999px; font-size: 12px; }
+    .grid { display: grid; gap: 16px; }
+    @media (min-width: 768px) { .md\:grid-cols-3 { grid-template-columns: repeat(3,1fr); } .md\:grid-cols-2 { grid-template-columns: repeat(2,1fr); } }
+    @media (min-width: 1024px) { .lg\:grid-cols-3 { grid-template-columns: repeat(3,1fr); } }
+    .clickable { cursor: pointer; }
+    .muted { color: #6b7280; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px;">
+      <div>
+        <h1 style="margin:0 0 8px 0;">WiFi Dækningsanalyse</h1>
+        <p class="muted" style="margin:0;">Oversigt over alle projekter og målinger</p>
+      </div>
+      <button id="createBtn" style="display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:6px; background:#0ea5a9; color:white; border:none;">+ Opret nyt projekt</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid md:grid-cols-3" id="statsGrid" style="margin-bottom:24px;">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div style="font-size:12px;">Totale projekter</div>
+          </div>
+          <div aria-hidden></div>
+        </div>
+        <div class="card-content">
+          <div id="totalProjects" style="font-size:20px;">0</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div style="font-size:12px;">Aktive målinger</div>
+          </div>
+          <div aria-hidden></div>
+        </div>
+        <div class="card-content">
+          <div id="activeMeasurements" style="font-size:20px;">0</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div style="font-size:12px;">Færdige projekter</div>
+          </div>
+          <div aria-hidden></div>
+        </div>
+        <div class="card-content">
+          <div id="completedProjects" style="font-size:20px;">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Projects Grid -->
+    <div>
+      <h2 style="margin:0 0 12px 0;">Projekter</h2>
+      <div class="grid md:grid-cols-2 lg:grid-cols-3" id="projectsGrid"></div>
+    </div>
+
+    <!-- Template for a project card (hidden) -->
+    <template id="projectCardTpl">
+      <div class="card clickable" style="display:flex; flex-direction:column; height:100%;">
+        <div class="card-header">
+          <div style="flex:1;">
+            <div class="title" style="font-weight:600; margin-bottom:4px;"></div>
+            <div class="desc muted" style="font-size:13px;"></div>
+          </div>
+          <div class="badge" style="margin-left:12px;"></div>
+        </div>
+        <div class="card-content" style="flex:1; display:flex; flex-direction:column; justify-content:space-between;">
+          <p class="muted" style="margin:0 0 12px 0; font-size:13px;"></p>
+          <div style="display:flex; align-items:center; gap:8px; font-size:12px; color:#6b7280;">
+            <span aria-hidden>📅</span>
+            <span class="updated"></span>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <script>
+    (function () {
+      // Projects state will be set via postMessage from the parent window.
+      let projects = [];
+
+      // Safe setter that re-renders the UI when projects change
+      function setProjects(p) {
+        projects = Array.isArray(p) ? p : [];
+        renderAll();
+      }
+
+      function parseDate(d) {
+        if (!d) return '';
+        const date = d instanceof Date ? d : new Date(d);
+        if (isNaN(date)) return '';
+        return date.toLocaleDateString('da-DK');
+      }
+
+      function getStatusText(status) {
+        switch (status) {
+          case 'completed': return 'Færdig';
+          case 'measuring': return 'I gang';
+          case 'draft': return 'Kladde';
+          default: return status || '';
+        }
+      }
+
+      function getStatusClass(status) {
+        switch (status) {
+          case 'completed': return 'background: #ecfdf5; color:#166534;';
+          case 'measuring': return 'background: #eff6ff; color:#1e3a8a;';
+          case 'draft': return 'background: #f3f4f6; color:#374151;';
+          default: return '';
+        }
+      }
+
+      // Projects grid rendering utilities
+      const grid = document.getElementById('projectsGrid');
+      const tpl = document.getElementById('projectCardTpl');
+
+      function renderAll() {
+        // Stats
+        document.getElementById('totalProjects').textContent = String(projects.length);
+        document.getElementById('activeMeasurements').textContent = String(projects.filter(p => p.status === 'measuring').length);
+        document.getElementById('completedProjects').textContent = String(projects.filter(p => p.status === 'completed').length);
+
+        // Projects grid
+        grid.innerHTML = '';
+        if (!projects || projects.length === 0) {
+          grid.innerHTML = '<p class="muted">Ingen projekter at vise.</p>';
+          return;
+        }
+
+        projects.forEach(project => {
+          const node = tpl.content.cloneNode(true);
+          const wrapper = node.querySelector('.card');
+          const title = node.querySelector('.title');
+          const desc = node.querySelector('.desc');
+          const badge = node.querySelector('.badge');
+          const ptext = node.querySelector('p');
+          const updated = node.querySelector('.updated');
+
+          title.textContent = project.name || 'Uden navn';
+          desc.textContent = project.building || '';
+          ptext.textContent = project.description || '';
+          badge.textContent = getStatusText(project.status);
+          badge.setAttribute('style', getStatusClass(project.status) + ' padding:4px 8px; border-radius:9999px; font-size:12px;');
+          updated.textContent = project.updatedAt ? parseDate(project.updatedAt) : '';
+
+          wrapper.addEventListener('click', function () {
+            // Send select event to parent
+            if (window.parent && typeof window.parent.postMessage === 'function') {
+              window.parent.postMessage({ type: 'dashboard:select', project }, '*');
+            }
+          });
+
+          grid.appendChild(node);
+        });
+      }
+
+      // Create button sends event to parent
+      document.getElementById('createBtn').addEventListener('click', function () {
+        if (window.parent && typeof window.parent.postMessage === 'function') {
+          window.parent.postMessage({ type: 'dashboard:create' }, '*');
+        } else {
+          alert('Create project handler not available.');
+        }
+      });
+
+      // Listen for messages from parent
+      window.addEventListener('message', function (ev) {
+        try {
+          const msg = ev.data || {};
+          if (msg && msg.type === 'dashboard:setProjects') {
+            setProjects(msg.projects || []);
+          }
+        } catch (err) {
+          // ignore malformed messages
+        }
+      }, false);
+
+      // If parent provided initial projects via window.PROJECTS (backwards compatibility), use them
+      if (window.PROJECTS && Array.isArray(window.PROJECTS)) {
+        setProjects(window.PROJECTS);
+      } else {
+        renderAll();
+      }
+    })();
+  </script>
+</body>
+</html>

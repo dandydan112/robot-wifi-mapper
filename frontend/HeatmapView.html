@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Heatmap</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; margin: 0; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    .grid { display: grid; gap: 16px; }
+    @media (min-width: 1024px) { .lg\:grid-cols-4 { grid-template-columns: 1fr 3fr; } }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; background: white; }
+    .card-header { padding: 12px 16px; border-bottom: 1px solid #f3f4f6; }
+    .card-content { padding: 16px; }
+    .muted { color:#6b7280; }
+    .control { margin-bottom:12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Heatmap Visning</h1>
+    <p class="muted">Visualisering af WiFi-dækning med farveskala</p>
+
+    <div class="grid lg:grid-cols-4" style="display:flex; gap:16px;">
+      <div style="width:280px;">
+        <div class="card" style="margin-bottom:12px;"><div class="card-header"><strong>Filtre</strong></div>
+          <div class="card-content">
+            <div class="control"><label><input id="showAll" type="checkbox" checked /> Vis alle AP</label></div>
+            <div class="control" id="apSelectWrap" style="display:none;"><label>Vælg AP</label><select id="apSelect" style="width:100%; padding:6px; margin-top:6px;"></select></div>
+            <div class="control"><label>Radius: <span id="radiusVal">80</span>px</label><input id="radius" type="range" min="20" max="200" step="10" value="80" style="width:100%;" /></div>
+            <div class="control"><label>Gennemsigtighed: <span id="opacityVal">70</span>%</label><input id="opacity" type="range" min="10" max="100" step="5" value="70" style="width:100%;" /></div>
+          </div>
+        </div>
+
+        <div class="card"><div class="card-header"><strong>Signalstyrke</strong></div><div class="card-content"><div>-35 til -50 dBm: Fremragende</div><div>-51 til -70 dBm: God</div><div>-71 til -85 dBm: Svag</div></div></div>
+      </div>
+
+      <div style="flex:1;">
+        <div class="card"><div class="card-header"><strong>Heatmap</strong></div>
+          <div class="card-content">
+            <div id="canvasWrap" style="border-radius:6px; overflow:hidden; border:1px solid #e6e6e6;">
+              <canvas id="heatCanvas" style="width:100%; display:block;"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function(){
+      let floorPlan = null;
+      let measurements = [];
+      const canvas = document.getElementById('heatCanvas');
+      const showAll = document.getElementById('showAll');
+      const apSelect = document.getElementById('apSelect');
+      const apSelectWrap = document.getElementById('apSelectWrap');
+      const radiusInput = document.getElementById('radius');
+      const opacityInput = document.getElementById('opacity');
+      const radiusVal = document.getElementById('radiusVal');
+      const opacityVal = document.getElementById('opacityVal');
+
+      function getAccessPoints() {
+        const map = new Map();
+        measurements.forEach(m => map.set(m.bssid, { bssid: m.bssid, ssid: m.ssid }));
+        return Array.from(map.values());
+      }
+
+      function getColorForSignal(strength) {
+        const normalized = Math.max(0, Math.min(1, (strength + 85) / 50));
+        if (normalized < 0.5) {
+          const factor = normalized * 2;
+          return `rgba(255, ${Math.floor(255 * factor)}, 0, 1)`;
+        } else {
+          const factor = (normalized - 0.5) * 2;
+          return `rgba(${Math.floor(255 * (1 - factor))}, 255, 0, 1)`;
+        }
+      }
+
+      function draw() {
+        if (!floorPlan) {
+          canvas.width = 800; canvas.height = 400; const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#f8fafc'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#9ca3af'; ctx.fillText('Upload en plantegning og tilføj målepunkter først',20,20); return; }
+        const ctx = canvas.getContext('2d');
+        canvas.width = floorPlan.width; canvas.height = floorPlan.height;
+        const img = new Image();
+        img.onload = () => {
+          ctx.drawImage(img,0,0,canvas.width,canvas.height);
+          const show = showAll.checked;
+          const selectedAP = apSelect.value || 'all';
+          const filtered = show ? measurements : measurements.filter(m => m.bssid === selectedAP);
+          ctx.globalAlpha = parseFloat(opacityInput.value)/100;
+          filtered.forEach(m => {
+            const rad = parseInt(radiusInput.value,10);
+            const grad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, rad);
+            const col = getColorForSignal(m.signalStrength);
+            grad.addColorStop(0, col.replace(/, 1\)$/, ', 0.8)'));
+            grad.addColorStop(0.5, col.replace(/, 1\)$/, ', 0.4)'));
+            grad.addColorStop(1, col.replace(/, 1\)$/, ', 0)'));
+            ctx.fillStyle = grad;
+            ctx.fillRect(m.x - rad, m.y - rad, rad*2, rad*2);
+          });
+          ctx.globalAlpha = 1;
+          filtered.forEach(m => { ctx.beginPath(); ctx.arc(m.x,m.y,4,0,Math.PI*2); ctx.fillStyle='white'; ctx.fill(); ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.lineWidth=2; ctx.stroke(); });
+        };
+        img.src = floorPlan.imageUrl;
+      }
+
+      function rebuildAPSelect() {
+        const aps = getAccessPoints();
+        apSelect.innerHTML = '';
+        const opt = document.createElement('option'); opt.value='all'; opt.textContent='Alle'; apSelect.appendChild(opt);
+        aps.forEach(ap=>{ const o=document.createElement('option'); o.value=ap.bssid; o.textContent = ap.ssid+' ('+ap.bssid.slice(0,8)+')'; apSelect.appendChild(o); });
+      }
+
+      showAll.addEventListener('change', ()=>{ apSelectWrap.style.display = showAll.checked ? 'none' : 'block'; draw(); });
+      apSelect.addEventListener('change', ()=> draw());
+      radiusInput.addEventListener('input', ()=>{ radiusVal.textContent=radiusInput.value; draw(); });
+      opacityInput.addEventListener('input', ()=>{ opacityVal.textContent=opacityInput.value; draw(); });
+
+      window.addEventListener('message', function(ev){
+        try {
+          const msg = ev.data || {};
+          if (msg.type === 'heatmap:set') {
+            measurements = Array.isArray(msg.measurements) ? msg.measurements : [];
+            rebuildAPSelect(); draw();
+          }
+          if (msg.type === 'heatmap:setFloorPlan') {
+            floorPlan = msg.floorPlan || null; draw();
+          }
+        } catch (err) {}
+      }, false);
+
+      if (window.parent && typeof window.parent.postMessage === 'function') {
+        window.parent.postMessage({ type: 'heatmap:ready' }, '*');
+      }
+
+    })();
+  </script>
+</body>
+</html>
