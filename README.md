@@ -8,7 +8,7 @@
 2. Run `npm run dev` to start development servers (frontend + backend)
 
 ### Testing
-Run `node test-signalstyrke.js` to test the signal strength API
+Run `node test-signalstyrke.js` in root to test the signal strength API
 
 ### API Endpoints
 - `POST /api/measurement-points` - Create measurement point with Wi-Fi scan
