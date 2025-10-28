@@ -1,0 +1,226 @@
+{
+  "measurementPoints": {
+    "mhavtyfi-pwmh4q": {
+      "id": "mhavtyfi-pwmh4q",
+      "name": "Test Point",
+      "x": 10.5,
+      "y": 20.3,
+      "scan_status": "pending",
+      "createdAt": "2025-10-28T18:10:37.326Z",
+      "updatedAt": "2025-10-28T18:10:37.326Z",
+      "readings": []
+    },
+    "mhavv33s-mcuolk": {
+      "id": "mhavv33s-mcuolk",
+      "name": "Test Point",
+      "x": 10.5,
+      "y": 20.3,
+      "scan_status": "done",
+      "createdAt": "2025-10-28T18:11:30.040Z",
+      "updatedAt": "2025-10-28T18:11:30.130Z",
+      "readings": [
+        {
+          "ssid": "DIRECT-E8-HP ENVY 5640 series",
+          "bssid": "30:e1:71:4c:9a:e9",
+          "rssi": -89,
+          "frequency": 2417,
+          "channel": 2,
+          "raw": {
+            "mac": "30:e1:71:4c:9a:e9",
+            "bssid": "30:e1:71:4c:9a:e9",
+            "ssid": "DIRECT-E8-HP ENVY 5640 series",
+            "channel": 2,
+            "frequency": 2417,
+            "signal_level": -89,
+            "quality": 22,
+            "security": "WPA2-Personal",
+            "security_flags": "CCMP ",
+            "mode": "Unknown"
+          }
+        },
+        {
+          "ssid": "SalemFamilien-NET",
+          "bssid": "02:ab:d8:1a:7f:22",
+          "rssi": -85.5,
+          "frequency": 2417,
+          "channel": 2,
+          "raw": {
+            "mac": "02:ab:d8:1a:7f:22",
+            "bssid": "02:ab:d8:1a:7f:22",
+            "ssid": "SalemFamilien-NET",
+            "channel": 2,
+            "frequency": 2417,
+            "signal_level": -85.5,
+            "quality": 29,
+            "security": "WPA2-Personal",
+            "security_flags": "CCMP ",
+            "mode": "Unknown"
+          }
+        },
+        {
+          "ssid": "H138-380_A7E6",
+          "bssid": "c2:29:f3:e6:a7:1f",
+          "rssi": -90,
+          "frequency": 2417,
+          "channel": 2,
+          "raw": {
+            "mac": "c2:29:f3:e6:a7:1f",
+            "bssid": "c2:29:f3:e6:a7:1f",
+            "ssid": "H138-380_A7E6",
+            "channel": 2,
+            "frequency": 2417,
+            "signal_level": -90,
+            "quality": 20,
+            "security": "WPA2-Personal",
+            "security_flags": "CCMP ",
+            "mode": "Unknown"
+          }
+        },
+        {
+          "ssid": "Tien",
+          "bssid": "a4:08:f5:15:4b:4e",
+          "rssi": -59.5,
+          "frequency": 2417,
+          "channel": 2,
+          "raw": {
+            "mac": "a4:08:f5:15:4b:4e",
+            "bssid": "a4:08:f5:15:4b:4e",
+            "ssid": "Tien",
+            "channel": 2,
+            "frequency": 2417,
+            "signal_level": -59.5,
+            "quality": 81,
+            "security": "WPA2-Personal",
+            "security_flags": "CCMP ",
+            "mode": "Unknown"
+          }
+        },
+        {
+          "ssid": "Tien_5GHz",
+          "bssid": "a4:08:f5:15:4b:4f",
+          "rssi": -62.5,
+          "frequency": 2432,
+          "channel": 5,
+          "raw": {
+            "mac": "a4:08:f5:15:4b:4f",
+            "bssid": "a4:08:f5:15:4b:4f",
+            "ssid": "Tien_5GHz",
+            "channel": 5,
+            "frequency": 2432,
+            "signal_level": -62.5,
+            "quality": 75,
+            "security": "WPA2-Personal",
+            "security_flags": "CCMP ",
+            "mode": "Unknown"
+          }
+        }
+      ]
+    },
+    "mhavwd2f-qjgptq": {
+      "id": "mhavwd2f-qjgptq",
+      "name": "Test Point",
+      "x": 10.5,
+      "y": 20.3,
+      "scan_status": "done",
+      "createdAt": "2025-10-28T18:12:29.607Z",
+      "updatedAt": "2025-10-28T18:12:29.655Z",
+      "readings": [
+        {
+          "ssid": null,
+          "bssid": "00:eb:d8:1a:7f:22",
+          "rssi": -89,
+          "frequency": 2417,
+          "channel": 2,
+          "raw": {
+            "mac": "00:eb:d8:1a:7f:22",
+            "bssid": "00:eb:d8:1a:7f:22",
+            "ssid": "",
+            "channel": 2,
+            "frequency": 2417,
+            "signal_level": -89,
+            "quality": 22,
+            "security": "WPA2-Personal",
+            "security_flags": "CCMP ",
+            "mode": "Unknown"
+          }
+        },
+        {
+          "ssid": "SalemFamilien-NET",
+          "bssid": "02:ab:d8:1a:7f:22",
+          "rssi": -85.5,
+          "frequency": 2417,
+          "channel": 2,
+          "raw": {
+            "mac": "02:ab:d8:1a:7f:22",
+            "bssid": "02:ab:d8:1a:7f:22",
+            "ssid": "SalemFamilien-NET",
+            "channel": 2,
+            "frequency": 2417,
+            "signal_level": -85.5,
+            "quality": 29,
+            "security": "WPA2-Personal",
+            "security_flags": "CCMP ",
+            "mode": "Unknown"
+          }
+        },
+        {
+          "ssid": "H138-380_A7E6",
+          "bssid": "c2:29:f3:e6:a7:1f",
+          "rssi": -91,
+          "frequency": 2417,
+          "channel": 2,
+          "raw": {
+            "mac": "c2:29:f3:e6:a7:1f",
+            "bssid": "c2:29:f3:e6:a7:1f",
+            "ssid": "H138-380_A7E6",
+            "channel": 2,
+            "frequency": 2417,
+            "signal_level": -91,
+            "quality": 18,
+            "security": "WPA2-Personal",
+            "security_flags": "CCMP ",
+            "mode": "Unknown"
+          }
+        },
+        {
+          "ssid": "Tien",
+          "bssid": "a4:08:f5:15:4b:4e",
+          "rssi": -61,
+          "frequency": 2417,
+          "channel": 2,
+          "raw": {
+            "mac": "a4:08:f5:15:4b:4e",
+            "bssid": "a4:08:f5:15:4b:4e",
+            "ssid": "Tien",
+            "channel": 2,
+            "frequency": 2417,
+            "signal_level": -61,
+            "quality": 78,
+            "security": "WPA2-Personal",
+            "security_flags": "CCMP ",
+            "mode": "Unknown"
+          }
+        },
+        {
+          "ssid": "Tien_5GHz",
+          "bssid": "a4:08:f5:15:4b:4f",
+          "rssi": -59,
+          "frequency": 2432,
+          "channel": 5,
+          "raw": {
+            "mac": "a4:08:f5:15:4b:4f",
+            "bssid": "a4:08:f5:15:4b:4f",
+            "ssid": "Tien_5GHz",
+            "channel": 5,
+            "frequency": 2432,
+            "signal_level": -59,
+            "quality": 82,
+            "security": "WPA2-Personal",
+            "security_flags": "CCMP ",
+            "mode": "Unknown"
+          }
+        }
+      ]
+    }
+  }
+}

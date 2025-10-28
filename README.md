@@ -1,12 +1,10 @@
-## Running the code
-
 ### Prerequisites
 - Node.js installed
-- **Wi-Fi permissions** (Windows may require admin privileges for Wi-Fi scanning)
-- Available Wi-Fi networks for testing
 
 ### Installation
 1. Run `npm i` to install dependencies
+
+## Running the code
 2. Run `npm run dev` to start development servers (frontend + backend)
 
 ### Testing
