@@ -88,7 +88,10 @@
             <div class="title" style="font-weight:600; margin-bottom:4px;"></div>
             <div class="desc muted" style="font-size:13px;"></div>
           </div>
-          <div class="badge" style="margin-left:12px;"></div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <div class="badge" style="margin-left:12px;"></div>
+            <button class="delete-btn" style="background:transparent; border:none; cursor:pointer; padding:4px; color:#ef4444; font-size:18px; font-weight:bold; line-height:1;" title="Slet projekt">×</button>
+          </div>
         </div>
         <div class="card-content" style="flex:1; display:flex; flex-direction:column; justify-content:space-between;">
           <p class="muted" style="margin:0 0 12px 0; font-size:13px;"></p>
@@ -105,10 +108,19 @@
     (function () {
       // Projects state will be set via postMessage from the parent window.
       let projects = [];
+      // Load projects from localStorage if present
+      if (window.localStorage && localStorage.getItem('projects')) {
+        try {
+          projects = JSON.parse(localStorage.getItem('projects')) || [];
+        } catch (e) { projects = []; }
+      }
 
       // Safe setter that re-renders the UI when projects change
       function setProjects(p) {
         projects = Array.isArray(p) ? p : [];
+        if (window.localStorage) {
+          localStorage.setItem('projects', JSON.stringify(projects));
+        }
         renderAll();
       }
 
@@ -170,6 +182,27 @@
           badge.setAttribute('style', getStatusClass(project.status) + ' padding:4px 8px; border-radius:9999px; font-size:12px;');
           updated.textContent = project.updatedAt ? parseDate(project.updatedAt) : '';
 
+          // Delete button handler
+          const deleteBtn = node.querySelector('.delete-btn');
+          deleteBtn.addEventListener('click', function(ev) {
+            ev.stopPropagation(); // Prevent card click
+            if (confirm(`Er du sikker på at du vil slette projektet \"${project.name}\"?`)) {
+              // Remove from local projects array
+              projects = projects.filter(p => p.id !== project.id);
+              if (window.localStorage) {
+                localStorage.setItem('projects', JSON.stringify(projects));
+              }
+              if (window.PROJECTS && Array.isArray(window.PROJECTS)) {
+                window.PROJECTS = window.PROJECTS.filter(p => p.id !== project.id);
+              }
+              renderAll();
+              // Notify parent
+              if (window.parent && typeof window.parent.postMessage === 'function') {
+                window.parent.postMessage({ type: 'dashboard:delete', projectId: project.id }, '*');
+              }
+            }
+          });
+
           wrapper.addEventListener('click', function () {
             // Send select event to parent
             if (window.parent && typeof window.parent.postMessage === 'function') {
@@ -197,6 +230,10 @@
           if (msg && msg.type === 'dashboard:setProjects') {
             setProjects(msg.projects || []);
           }
+          if (msg && msg.type === 'createProject:create' && msg.project) {
+            // Add new project and persist
+            setProjects([...projects, msg.project]);
+          }
         } catch (err) {
           // ignore malformed messages
         }
@@ -205,6 +242,8 @@
       // If parent provided initial projects via window.PROJECTS (backwards compatibility), use them
       if (window.PROJECTS && Array.isArray(window.PROJECTS)) {
         setProjects(window.PROJECTS);
+      } else if (window.localStorage && localStorage.getItem('projects')) {
+        setProjects(JSON.parse(localStorage.getItem('projects')));
       } else {
         renderAll();
       }

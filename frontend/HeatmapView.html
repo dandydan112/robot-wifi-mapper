@@ -39,7 +39,7 @@
         <div class="card"><div class="card-header"><strong>Heatmap</strong></div>
           <div class="card-content">
             <div id="canvasWrap" style="border-radius:6px; overflow:hidden; border:1px solid #e6e6e6;">
-              <canvas id="heatCanvas" style="width:100%; display:block;"></canvas>
+              <canvas id="heatCanvas" style="display:block;"></canvas>
             </div>
           </div>
         </div>
@@ -51,6 +51,8 @@
     (function(){
       let floorPlan = null;
       let measurements = [];
+      let cachedDisplayWidth = null;
+      let cachedDisplayHeight = null;
       const canvas = document.getElementById('heatCanvas');
       const showAll = document.getElementById('showAll');
       const apSelect = document.getElementById('apSelect');
@@ -81,26 +83,77 @@
         if (!floorPlan) {
           canvas.width = 800; canvas.height = 400; const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#f8fafc'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#9ca3af'; ctx.fillText('Upload en plantegning og tilføj målepunkter først',20,20); return; }
         const ctx = canvas.getContext('2d');
-        canvas.width = floorPlan.width; canvas.height = floorPlan.height;
         const img = new Image();
         img.onload = () => {
-          ctx.drawImage(img,0,0,canvas.width,canvas.height);
+          // Use natural image dimensions to ensure consistency
+          const originalWidth = floorPlan.width || img.naturalWidth;
+          const originalHeight = floorPlan.height || img.naturalHeight;
+          
+          // Calculate display dimensions only once, then cache them
+          if (cachedDisplayWidth === null || cachedDisplayHeight === null) {
+            const canvasWrap = document.getElementById('canvasWrap');
+            const containerWidth = canvasWrap.offsetWidth;
+            const scale = containerWidth / originalWidth;
+            cachedDisplayWidth = containerWidth;
+            cachedDisplayHeight = originalHeight * scale;
+          }
+          
+          const displayWidth = cachedDisplayWidth;
+          const displayHeight = cachedDisplayHeight;
+          
+          // Set canvas to display size (not original size)
+          canvas.width = displayWidth;
+          canvas.height = displayHeight;
+          
+          ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
           const show = showAll.checked;
           const selectedAP = apSelect.value || 'all';
           const filtered = show ? measurements : measurements.filter(m => m.bssid === selectedAP);
           ctx.globalAlpha = parseFloat(opacityInput.value)/100;
+          
+          // Convert measurements from original coordinates to display coordinates
           filtered.forEach(m => {
+            const displayX = (m.x / originalWidth) * displayWidth;
+            const displayY = (m.y / originalHeight) * displayHeight;
             const rad = parseInt(radiusInput.value,10);
-            const grad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, rad);
-            const col = getColorForSignal(m.signalStrength);
-            grad.addColorStop(0, col.replace(/, 1\)$/, ', 0.8)'));
-            grad.addColorStop(0.5, col.replace(/, 1\)$/, ', 0.4)'));
-            grad.addColorStop(1, col.replace(/, 1\)$/, ', 0)'));
+            const grad = ctx.createRadialGradient(displayX, displayY, 0, displayX, displayY, rad);
+            
+            // Gradient with distance-based colors: green (0-100px), yellow (100-160px), red (160-200px)
+            if (rad <= 100) {
+              // Only green zone visible
+              grad.addColorStop(0, 'rgba(34, 197, 94, 0.8)'); // Green center
+              grad.addColorStop(1, 'rgba(34, 197, 94, 0)'); // Fade to transparent
+            } else if (rad <= 160) {
+              // Green + yellow zones
+              const greenStop = 100 / rad;
+              grad.addColorStop(0, 'rgba(34, 197, 94, 0.8)'); // Green center
+              grad.addColorStop(greenStop, 'rgba(234, 179, 8, 0.6)'); // Transition to yellow
+              grad.addColorStop(1, 'rgba(234, 179, 8, 0)'); // Yellow fades out
+            } else {
+              // All three zones: green + yellow + red
+              const greenStop = 100 / rad;
+              const yellowStop = 160 / rad;
+              grad.addColorStop(0, 'rgba(34, 197, 94, 0.8)'); // Green center
+              grad.addColorStop(greenStop, 'rgba(234, 179, 8, 0.6)'); // Yellow zone
+              grad.addColorStop(yellowStop, 'rgba(239, 68, 68, 0.4)'); // Red zone
+              grad.addColorStop(1, 'rgba(239, 68, 68, 0)'); // Red fades out
+            }
+            
             ctx.fillStyle = grad;
-            ctx.fillRect(m.x - rad, m.y - rad, rad*2, rad*2);
+            ctx.fillRect(displayX - rad, displayY - rad, rad*2, rad*2);
           });
           ctx.globalAlpha = 1;
-          filtered.forEach(m => { ctx.beginPath(); ctx.arc(m.x,m.y,4,0,Math.PI*2); ctx.fillStyle='white'; ctx.fill(); ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.lineWidth=2; ctx.stroke(); });
+          filtered.forEach(m => { 
+            const displayX = (m.x / originalWidth) * displayWidth;
+            const displayY = (m.y / originalHeight) * displayHeight;
+            ctx.beginPath(); 
+            ctx.arc(displayX, displayY, 4, 0, Math.PI*2); 
+            ctx.fillStyle='white'; 
+            ctx.fill(); 
+            ctx.strokeStyle='rgba(0,0,0,0.5)'; 
+            ctx.lineWidth=2; 
+            ctx.stroke(); 
+          });
         };
         img.src = floorPlan.imageUrl;
       }
@@ -125,7 +178,11 @@
             rebuildAPSelect(); draw();
           }
           if (msg.type === 'heatmap:setFloorPlan') {
-            floorPlan = msg.floorPlan || null; draw();
+            floorPlan = msg.floorPlan || null; 
+            // Reset cached dimensions when new floor plan is loaded
+            cachedDisplayWidth = null;
+            cachedDisplayHeight = null;
+            draw();
           }
         } catch (err) {}
       }, false);

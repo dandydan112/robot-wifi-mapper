@@ -6,9 +6,9 @@
   <title>Målepunkter</title>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; margin: 0; }
-    .container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
     .grid { display: grid; gap: 16px; }
-    @media (min-width: 1024px) { .lg\:grid-cols-3 { grid-template-columns: 2fr 1fr; } }
+    @media (min-width: 1024px) { .lg\:grid-cols-3 { grid-template-columns: 1fr 3fr; } }
     .card { border: 1px solid #e5e7eb; border-radius: 8px; background: white; }
     .card-header { padding: 12px 16px; border-bottom: 1px solid #f3f4f6; }
     .card-content { padding: 16px; }
@@ -29,17 +29,8 @@
       <p class="muted">Klik på kortet for at tilføje målepunkter</p>
     </div>
 
-    <div class="grid lg:grid-cols-3">
-      <div class="card">
-        <div class="card-header"><strong>Interaktivt kort</strong><div class="muted">Klik for at tilføje nye målepunkter</div></div>
-        <div class="card-content" id="mapArea" style="position:relative; min-height:480px;">
-          <div id="mapPlaceholder" style="border:1px dashed #cbd5e1; border-radius:6px; height:480px; display:flex; align-items:center; justify-content:center;">
-            <div style="text-align:center; color:#9ca3af;">Upload en plantegning først</div>
-          </div>
-        </div>
-      </div>
-
-      <div>
+    <div class="grid lg:grid-cols-3" style="display:flex; gap:16px;">
+      <div style="width:280px;">
         <div class="card" style="margin-bottom:12px;">
           <div class="card-header"><strong>Statistik</strong></div>
           <div class="card-content">
@@ -56,6 +47,17 @@
               <thead><tr><th>Pos</th><th>Signal</th><th>SSID</th><th></th></tr></thead>
               <tbody><tr><td colspan="4" class="muted">Ingen målepunkter endnu.</td></tr></tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      <div style="flex:1;">
+        <div class="card">
+          <div class="card-header"><strong>Interaktivt kort</strong><div class="muted">Klik for at tilføje nye målepunkter</div></div>
+          <div class="card-content" id="mapArea" style="position:relative;">
+            <div id="mapPlaceholder" style="border:1px dashed #cbd5e1; border-radius:6px; height:480px; display:flex; align-items:center; justify-content:center;">
+              <div style="text-align:center; color:#9ca3af;">Upload en plantegning først</div>
+            </div>
           </div>
         </div>
       </div>
@@ -117,25 +119,40 @@
         const wrapper = document.createElement('div');
         wrapper.style.position = 'relative';
         wrapper.appendChild(img);
-        wrapper.addEventListener('click', function(e){
-          const rect = img.getBoundingClientRect();
-          const x = e.clientX - rect.left;
-          const y = e.clientY - rect.top;
-          selectedPoint = { x, y };
-          openModal('add');
-        });
+        
+        // Wait for image to load to get accurate dimensions
+        img.onload = function() {
+          const displayedWidth = img.offsetWidth;
+          const displayedHeight = img.offsetHeight;
+          const originalWidth = floorPlan.width || img.naturalWidth;
+          const originalHeight = floorPlan.height || img.naturalHeight;
+          
+          wrapper.addEventListener('click', function(e){
+            const rect = img.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            
+            // Convert displayed coordinates to original image coordinates
+            const x = (clickX / displayedWidth) * originalWidth;
+            const y = (clickY / displayedHeight) * originalHeight;
+            selectedPoint = { x, y };
+            openModal('add');
+          });
 
-        // add markers
-        measurements.forEach(m => {
-          const dot = document.createElement('div');
-          dot.className = 'dot';
-          dot.style.left = (m.x) + 'px';
-          dot.style.top = (m.y) + 'px';
-          dot.style.background = m.signalStrength >= -60 ? '#22c55e' : (m.signalStrength >= -70 ? '#eab308' : '#ef4444');
-          dot.title = m.signalStrength + ' dBm';
-          dot.addEventListener('click', function(ev){ ev.stopPropagation(); openModal('edit', m); });
-          wrapper.appendChild(dot);
-        });
+          // add markers - convert from original coordinates to display coordinates
+          measurements.forEach(m => {
+            const dot = document.createElement('div');
+            dot.className = 'dot';
+            const displayX = (m.x / originalWidth) * displayedWidth;
+            const displayY = (m.y / originalHeight) * displayedHeight;
+            dot.style.left = displayX + 'px';
+            dot.style.top = displayY + 'px';
+            dot.style.background = m.signalStrength >= -60 ? '#22c55e' : (m.signalStrength >= -70 ? '#eab308' : '#ef4444');
+            dot.title = m.signalStrength + ' dBm';
+            dot.addEventListener('click', function(ev){ ev.stopPropagation(); openModal('edit', m); });
+            wrapper.appendChild(dot);
+          });
+        };
 
         mapArea.appendChild(wrapper);
       }
