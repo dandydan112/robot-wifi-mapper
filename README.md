@@ -1,11 +1,25 @@
+## Running the code
 
-  # WiFi Coverage Analysis App
+### Prerequisites
+- Node.js installed
+- **Wi-Fi permissions** (Windows may require admin privileges for Wi-Fi scanning)
+- Available Wi-Fi networks for testing
 
-  This is a code bundle for WiFi Coverage Analysis App. The original project is available at https://www.figma.com/design/2gDoUgJelg9ApQjKj2Qk1W/WiFi-Coverage-Analysis-App.
+### Installation
+1. Run `npm i` to install dependencies
+2. Run `npm run dev` to start development servers (frontend + backend)
 
-  ## Running the code
+### Testing
+Run `node test-signalstyrke.js` to test the signal strength API
 
-  Run `npm i` to install the dependencies.
+### API Endpoints
+- `POST /api/measurement-points` - Create measurement point with Wi-Fi scan
+- `GET /api/measurement-points/:id` - Get measurement point with signal data
+- `GET /api/measurement-points` - List all measurement points
+- `GET /api/health` - Health check
 
-  Run `npm run dev` to start the development server.
-  
+### Dependencies
+- `express` - Web server framework
+- `node-wifi` - Cross-platform Wi-Fi scanning
+- `concurrently` - Run multiple commands
+- `vite` - Frontend build tool  
