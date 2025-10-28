@@ -1,7 +1,8 @@
 
   # WiFi Coverage Analysis App
 
-  This is a code bundle for WiFi Coverage Analysis App. The original project is available at https://www.figma.com/design/2gDoUgJelg9ApQjKj2Qk1W/WiFi-Coverage-Analysis-App.
+  This is a code bundle for WiFi Coverage Analysis App. 
+  The original project is available at https://www.figma.com/design/2gDoUgJelg9ApQjKj2Qk1W/WiFi-Coverage-Analysis-App.
 
   ## Running the code
 
