@@ -23,7 +23,7 @@ async function runTests() {
   }
   
   // Start the actual backend server for testing
-  console.log('🚀 Starting backend server...');
+  console.log(' Starting backend server...');
   const { spawn } = require('child_process');
   const server = spawn('node', ['backend/index.js'], { 
     stdio: 'pipe',
@@ -87,9 +87,9 @@ async function runTests() {
     }
     
     measurementPointId = mp.id;
-    console.log(`   📍 Created measurement point at (${mp.x}, ${mp.y})`);
-    console.log(`   🆔 ID: ${mp.id}`);
-    console.log(`   ⏳ Status: ${mp.scan_status}`);
+    console.log(`    Created measurement point at (${mp.x}, ${mp.y})`);
+    console.log(`    ID: ${mp.id}`);
+    console.log(`    Status: ${mp.scan_status}`);
   });
   
   // Test 2: Wait for scanning to complete and check signal strength
@@ -109,14 +109,14 @@ async function runTests() {
     }
     
     const mp = response.body;
-    console.log(`   📡 Scan status: ${mp.scan_status}`);
+    console.log(`    Scan status: ${mp.scan_status}`);
     
     if (mp.scan_status === 'done' && mp.readings && mp.readings.length > 0) {
-      console.log(`   🎉 Found ${mp.readings.length} Wi-Fi networks!`);
+      console.log(`    Found ${mp.readings.length} Wi-Fi networks!`);
       
       mp.readings.forEach((reading, index) => {
         if (typeof reading.rssi === 'number') {
-          console.log(`   � Network ${index + 1}: ${reading.ssid || 'Hidden'} - Signal: ${reading.rssi} dBm`);
+          console.log(`    Network ${index + 1}: ${reading.ssid || 'Hidden'} - Signal: ${reading.rssi} dBm`);
         }
       });
       
@@ -127,11 +127,11 @@ async function runTests() {
       }
       
     } else if (mp.scan_status === 'failed') {
-      console.log(`   ⚠️  Scan failed: ${mp.error?.message || 'Unknown error'}`);
-      console.log('   ℹ️  This might be due to Wi-Fi permissions or hardware');
+      console.log(`     Scan failed: ${mp.error?.message || 'Unknown error'}`);
+      console.log('   ℹ  This might be due to Wi-Fi permissions or hardware');
     } else {
-      console.log(`   ⏳ Scan still in progress or no networks found`);
-      console.log('   ℹ️  This is normal - Wi-Fi scanning takes time');
+      console.log(`    Scan still in progress or no networks found`);
+      console.log('   ℹ  This is normal - Wi-Fi scanning takes time');
     }
     
     // Test passes if we can retrieve the measurement point (regardless of scan status)
@@ -168,9 +168,9 @@ async function runTests() {
   console.log(`   📈 Total:  ${passed + failed}`);
   
   if (failed === 0) {
-    console.log('\n🎉 All tests passed! Signal strength API is working.');
+    console.log('\n All tests passed! Signal strength API is working.');
   } else {
-    console.log('\n💥 Some tests failed.');
+    console.log('\n Some tests failed.');
     process.exit(1);
   }
 }
