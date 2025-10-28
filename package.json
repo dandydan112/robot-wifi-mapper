@@ -10,10 +10,11 @@
     "start": "node backend/index.js"
   },
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^4.18.2",
+    "node-wifi": "^2.0.15"
   },
   "devDependencies": {
     "concurrently": "^8.2.0",
-    "vite": "6.3.5"
+    "vite": "^6.4.1"
   }
 }

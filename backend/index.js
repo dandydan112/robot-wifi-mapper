@@ -4,10 +4,16 @@ const app = express();
 
 app.use(express.json());
 
-// Example API endpoint
+// Import routes
+const measurementPointsRouter = require('./routes/measurementPoints');
+
+// Health endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
 });
+
+// Mount routes
+app.use('/api/measurement-points', measurementPointsRouter);
 
 // In production you might serve built frontend from backend/static
 if (process.env.NODE_ENV === 'production') {
