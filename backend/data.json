@@ -221,6 +221,74 @@
           }
         }
       ]
+    },
+    "mhawasko-1oxj0z": {
+      "id": "mhawasko-1oxj0z",
+      "name": "Test Point",
+      "x": 10.5,
+      "y": 20.3,
+      "scan_status": "done",
+      "createdAt": "2025-10-28T18:23:42.888Z",
+      "updatedAt": "2025-10-28T18:23:42.937Z",
+      "readings": [
+        {
+          "ssid": "H138-380_A7E6",
+          "bssid": "c2:29:f3:e6:a7:1f",
+          "rssi": -85.5,
+          "frequency": 2417,
+          "channel": 2,
+          "raw": {
+            "mac": "c2:29:f3:e6:a7:1f",
+            "bssid": "c2:29:f3:e6:a7:1f",
+            "ssid": "H138-380_A7E6",
+            "channel": 2,
+            "frequency": 2417,
+            "signal_level": -85.5,
+            "quality": 29,
+            "security": "WPA2-Personal",
+            "security_flags": "CCMP ",
+            "mode": "Unknown"
+          }
+        },
+        {
+          "ssid": "Tien",
+          "bssid": "a4:08:f5:15:4b:4e",
+          "rssi": -61,
+          "frequency": 2417,
+          "channel": 2,
+          "raw": {
+            "mac": "a4:08:f5:15:4b:4e",
+            "bssid": "a4:08:f5:15:4b:4e",
+            "ssid": "Tien",
+            "channel": 2,
+            "frequency": 2417,
+            "signal_level": -61,
+            "quality": 78,
+            "security": "WPA2-Personal",
+            "security_flags": "CCMP ",
+            "mode": "Unknown"
+          }
+        },
+        {
+          "ssid": "Tien_5GHz",
+          "bssid": "a4:08:f5:15:4b:4f",
+          "rssi": -64,
+          "frequency": 2432,
+          "channel": 5,
+          "raw": {
+            "mac": "a4:08:f5:15:4b:4f",
+            "bssid": "a4:08:f5:15:4b:4f",
+            "ssid": "Tien_5GHz",
+            "channel": 5,
+            "frequency": 2432,
+            "signal_level": -64,
+            "quality": 72,
+            "security": "WPA2-Personal",
+            "security_flags": "CCMP ",
+            "mode": "Unknown"
+          }
+        }
+      ]
     }
   }
 }

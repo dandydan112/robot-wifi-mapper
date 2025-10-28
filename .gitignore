@@ -209,3 +209,6 @@ __marimo__/
 # Node / JavaScript
 node_modules/
 package-lock.json
+
+# Data files
+backend/data.json
