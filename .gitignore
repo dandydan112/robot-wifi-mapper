@@ -211,4 +211,4 @@ node_modules/
 package-lock.json
 
 # Data files
-backend/services/data.json
+backend/data.json
