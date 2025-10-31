@@ -12,6 +12,7 @@ async function performWifiScan(measurementPointId) {
   await dataStore.updateMeasurementPointStatus(measurementPointId, 'in_progress');
 
   try {
+    console.log(`[wifiScanner] Starting scan for measurementPointId=${measurementPointId}`);
     // node-wifi's scan returns array of networks
     const networks = await new Promise((resolve, reject) => {
       wifi.scan((err, nets) => {
@@ -19,6 +20,11 @@ async function performWifiScan(measurementPointId) {
         resolve(nets || []);
       });
     });
+
+    console.log(`[wifiScanner] Scan completed for ${measurementPointId}: found ${Array.isArray(networks) ? networks.length : 0} networks`);
+    if (!Array.isArray(networks) || networks.length === 0) {
+      console.warn(`[wifiScanner] No networks detected for ${measurementPointId}`);
+    }
 
     // Map networks to the required fields
     const readings = (networks || []).map(n => ({
@@ -30,6 +36,19 @@ async function performWifiScan(measurementPointId) {
       // keep raw object for debugging
       raw: n
     }));
+
+    // Create individual measurement points for each detected network (so the UI
+    // can show/filter each signal separately). We still update the original
+    // measurement point with the aggregated readings.
+    try {
+      if (dataStore && typeof dataStore.createMeasurementPointsFromReadings === 'function') {
+        await dataStore.createMeasurementPointsFromReadings(measurementPointId, readings);
+      } else {
+        console.warn('[wifiScanner] createMeasurementPointsFromReadings not available on dataStore - skipping child creation');
+      }
+    } catch (e) {
+      console.error('Error creating measurement points from readings:', e);
+    }
 
     await dataStore.updateMeasurementPointStatus(measurementPointId, 'done', { readings });
   } catch (err) {

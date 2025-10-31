@@ -45,12 +45,20 @@ async function getMeasurementPoint(id) {
 
 async function getAllMeasurementPoints() {
   const data = await loadData();
+  // Return a lightweight listing but include parentId and a small readings preview
   return Object.values(data.measurementPoints || {}).map(mp => ({
     id: mp.id,
     name: mp.name,
     x: mp.x,
     y: mp.y,
     scan_status: mp.scan_status,
+    parentId: mp.parentId || null,
+    // include only the first reading as a preview to keep list small
+    readingPreview: Array.isArray(mp.readings) && mp.readings[0] ? {
+      ssid: mp.readings[0].ssid || null,
+      bssid: mp.readings[0].bssid || mp.readings[0].mac || null,
+      rssi: mp.readings[0].rssi || mp.readings[0].signal_level || null
+    } : null,
     createdAt: mp.createdAt,
     updatedAt: mp.updatedAt
   }));
@@ -69,9 +77,51 @@ async function updateMeasurementPointStatus(id, status, additionalData = {}) {
   return mp;
 }
 
+async function createMeasurementPointsFromReadings(originalId, readings) {
+  const data = await loadData();
+  const orig = data.measurementPoints[originalId];
+  if (!orig) return [];
+
+  // Deduplicate by BSSID when available, otherwise by SSID
+  const seen = new Set();
+  const newPoints = [];
+
+  for (let i = 0; i < (readings || []).length; i++) {
+    const r = readings[i];
+    const key = r.bssid || r.ssid || `index-${i}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const id = generateId();
+    const nameParts = [];
+    if (orig.name) nameParts.push(orig.name);
+    if (r.ssid) nameParts.push(r.ssid);
+    const name = nameParts.length ? nameParts.join(' - ') : id;
+
+    const mp = {
+      id,
+      name,
+      x: orig.x,
+      y: orig.y,
+      scan_status: 'done',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      readings: [r],
+      parentId: originalId
+    };
+
+    data.measurementPoints[id] = mp;
+    newPoints.push(mp);
+  }
+
+  await saveData(data);
+  return newPoints;
+}
+
 module.exports = {
   createMeasurementPoint,
   getMeasurementPoint,
   getAllMeasurementPoints,
-  updateMeasurementPointStatus
+  updateMeasurementPointStatus,
+  createMeasurementPointsFromReadings
 };

@@ -26,9 +26,18 @@
         <div class="card" style="margin-bottom:12px;"><div class="card-header"><strong>Filtre</strong></div>
           <div class="card-content">
             <div class="control"><label><input id="showAll" type="checkbox" checked /> Vis alle AP</label></div>
-            <div class="control" id="apSelectWrap" style="display:none;"><label>Vælg AP</label><select id="apSelect" style="width:100%; padding:6px; margin-top:6px;"></select></div>
+            <div class="control" id="apSelectWrap" style="display:none;">
+              <label>Vælg AP</label>
+              <div id="apList" style="margin-top:6px; max-height:180px; overflow:auto; border:1px solid #eee; padding:8px; border-radius:4px;"></div>
+            </div>
             <div class="control"><label>Radius: <span id="radiusVal">80</span>px</label><input id="radius" type="range" min="20" max="200" step="10" value="80" style="width:100%;" /></div>
             <div class="control"><label>Gennemsigtighed: <span id="opacityVal">70</span>%</label><input id="opacity" type="range" min="10" max="100" step="5" value="70" style="width:100%;" /></div>
+            <div class="control"><label>Vis kun signalstyrker mellem <span id="minVal">-90</span> dBm og <span id="maxVal">-30</span> dBm</label>
+              <div style="display:flex; gap:8px; margin-top:8px;">
+                <input id="minRssi" type="range" min="-100" max="0" step="0.5" value="-90" style="flex:1;" />
+                <input id="maxRssi" type="range" min="-100" max="0" step="0.5" value="-30" style="flex:1;" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -53,16 +62,25 @@
       let measurements = [];
       const canvas = document.getElementById('heatCanvas');
       const showAll = document.getElementById('showAll');
-      const apSelect = document.getElementById('apSelect');
-      const apSelectWrap = document.getElementById('apSelectWrap');
+  const apList = document.getElementById('apList');
+  const apSelectWrap = document.getElementById('apSelectWrap');
+  const selectedAPs = new Set();
       const radiusInput = document.getElementById('radius');
-      const opacityInput = document.getElementById('opacity');
-      const radiusVal = document.getElementById('radiusVal');
-      const opacityVal = document.getElementById('opacityVal');
+  const opacityInput = document.getElementById('opacity');
+  const radiusVal = document.getElementById('radiusVal');
+  const opacityVal = document.getElementById('opacityVal');
+  const minRssi = document.getElementById('minRssi');
+  const maxRssi = document.getElementById('maxRssi');
+  const minVal = document.getElementById('minVal');
+  const maxVal = document.getElementById('maxVal');
 
       function getAccessPoints() {
         const map = new Map();
-        measurements.forEach(m => map.set(m.bssid, { bssid: m.bssid, ssid: m.ssid }));
+        measurements.forEach(m => {
+          const b = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || null;
+          const s = m.ssid || (m.readings && m.readings[0] && m.readings[0].ssid) || '';
+          if (b) map.set(b, { bssid: b, ssid: s });
+        });
         return Array.from(map.values());
       }
 
@@ -77,7 +95,7 @@
         }
       }
 
-      function draw() {
+  function draw() {
         if (!floorPlan) {
           canvas.width = 800; canvas.height = 400; const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#f8fafc'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#9ca3af'; ctx.fillText('Upload en plantegning og tilføj målepunkter først',20,20); return; }
         const ctx = canvas.getContext('2d');
@@ -86,8 +104,24 @@
         img.onload = () => {
           ctx.drawImage(img,0,0,canvas.width,canvas.height);
           const show = showAll.checked;
-          const selectedAP = apSelect.value || 'all';
-          const filtered = show ? measurements : measurements.filter(m => m.bssid === selectedAP);
+          // RSSI filtering bounds (min <= signal <= max)
+          const minFilter = parseFloat(minRssi.value);
+          const maxFilter = parseFloat(maxRssi.value);
+
+          let base = measurements;
+          if (!show) {
+            // filter by selectedAPs set
+            base = measurements.filter(m => {
+              const b = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || null;
+              return b && selectedAPs.has(b);
+            });
+          }
+
+          const filtered = base.filter(m => {
+            const sig = (typeof m.signalStrength === 'number') ? m.signalStrength : (typeof m.rssi === 'number' ? m.rssi : (m.readings && m.readings[0] && (m.readings[0].rssi || m.readings[0].signal_level)) || null);
+            if (sig === null) return false;
+            return sig >= minFilter && sig <= maxFilter;
+          });
           ctx.globalAlpha = parseFloat(opacityInput.value)/100;
           filtered.forEach(m => {
             const rad = parseInt(radiusInput.value,10);
@@ -105,24 +139,76 @@
         img.src = floorPlan.imageUrl;
       }
 
-      function rebuildAPSelect() {
+      function rebuildAPList() {
         const aps = getAccessPoints();
-        apSelect.innerHTML = '';
-        const opt = document.createElement('option'); opt.value='all'; opt.textContent='Alle'; apSelect.appendChild(opt);
-        aps.forEach(ap=>{ const o=document.createElement('option'); o.value=ap.bssid; o.textContent = ap.ssid+' ('+ap.bssid.slice(0,8)+')'; apSelect.appendChild(o); });
+        apList.innerHTML = '';
+        selectedAPs.clear();
+        if (!aps || aps.length === 0) {
+          apList.textContent = 'Ingen adgangspunkter fundet';
+          return;
+        }
+
+        // Map to keep input references by BSSID
+        const inputsByBssid = new Map();
+
+        // Select all checkbox
+        const allLabel = document.createElement('label');
+        allLabel.style.display = 'block';
+        allLabel.style.marginBottom = '8px';
+        const allInput = document.createElement('input');
+        allInput.type = 'checkbox';
+        allInput.checked = true;
+        allInput.style.marginRight = '6px';
+        allLabel.appendChild(allInput);
+        allLabel.appendChild(document.createTextNode('Vælg alle'));
+        apList.appendChild(allLabel);
+
+        allInput.addEventListener('change', () => {
+          const checked = allInput.checked;
+          inputsByBssid.forEach((inp, b) => {
+            inp.checked = checked;
+            if (checked) selectedAPs.add(b); else selectedAPs.delete(b);
+          });
+          draw();
+        });
+
+        aps.forEach(ap => {
+          const label = document.createElement('label');
+          label.style.display = 'block';
+          label.style.marginBottom = '6px';
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          input.dataset.bssid = ap.bssid;
+          input.checked = true;
+          input.style.marginRight = '6px';
+          label.appendChild(input);
+          label.appendChild(document.createTextNode(`${ap.ssid || ''} (${ap.bssid.slice(0,8)})`));
+          apList.appendChild(label);
+          inputsByBssid.set(ap.bssid, input);
+          selectedAPs.add(ap.bssid);
+
+          input.addEventListener('change', () => {
+            if (input.checked) selectedAPs.add(ap.bssid); else selectedAPs.delete(ap.bssid);
+            // update allInput checked state
+            const allChecked = Array.from(inputsByBssid.values()).every(i => i.checked);
+            allInput.checked = allChecked;
+            draw();
+          });
+        });
       }
 
-      showAll.addEventListener('change', ()=>{ apSelectWrap.style.display = showAll.checked ? 'none' : 'block'; draw(); });
-      apSelect.addEventListener('change', ()=> draw());
+  showAll.addEventListener('change', ()=>{ apSelectWrap.style.display = showAll.checked ? 'none' : 'block'; draw(); });
       radiusInput.addEventListener('input', ()=>{ radiusVal.textContent=radiusInput.value; draw(); });
       opacityInput.addEventListener('input', ()=>{ opacityVal.textContent=opacityInput.value; draw(); });
+  minRssi.addEventListener('input', ()=>{ minVal.textContent = minRssi.value; draw(); });
+  maxRssi.addEventListener('input', ()=>{ maxVal.textContent = maxRssi.value; draw(); });
 
       window.addEventListener('message', function(ev){
         try {
           const msg = ev.data || {};
           if (msg.type === 'heatmap:set') {
             measurements = Array.isArray(msg.measurements) ? msg.measurements : [];
-            rebuildAPSelect(); draw();
+            rebuildAPList(); draw();
           }
           if (msg.type === 'heatmap:setFloorPlan') {
             floorPlan = msg.floorPlan || null; draw();

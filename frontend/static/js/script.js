@@ -343,17 +343,101 @@ class WiFiCoverageApp {
 
   handleAddMeasurement(measurement) {
     if (!this.currentProject) return;
-    
-    const updatedProject = {
-      ...this.currentProject,
-      measurements: [...(this.currentProject.measurements || []), measurement],
-      updatedAt: new Date()
-    };
-    
-    this.currentProject = updatedProject;
-    this.projects = this.projects.map(p => p.id === updatedProject.id ? updatedProject : p);
-    this.saveProjects();
-    this.updateUI();
+
+    // Send the measurement to backend so it can perform the scan and create
+    // per-AP measurement points. Fallback to local-only behaviour if the
+    // backend is unreachable.
+    (async () => {
+      try {
+        const url = (window.location && window.location.origin ? window.location.origin : '') + '/api/measurement-points';
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ x: measurement.x, y: measurement.y, name: measurement.ssid || measurement.name || null })
+        });
+
+        if (!resp.ok) throw new Error('Backend rejected measurement');
+        const mp = await resp.json();
+
+        // Add the original (pending) measurement to local project so user sees it
+        const added = {
+          id: mp.id,
+          x: mp.x,
+          y: mp.y,
+          signalStrength: null,
+          ssid: mp.name || '',
+          bssid: null,
+          timestamp: mp.createdAt
+        };
+
+        const updatedProject = {
+          ...this.currentProject,
+          measurements: [...(this.currentProject.measurements || []), added],
+          updatedAt: new Date()
+        };
+
+        this.currentProject = updatedProject;
+        this.projects = this.projects.map(p => p.id === updatedProject.id ? updatedProject : p);
+        this.saveProjects();
+        this.updateUI();
+
+        // Poll backend for scan completion and then fetch child points
+        const pollUrl = url + '/' + mp.id;
+        let attempts = 0;
+        while (attempts < 40) { // ~40 * 1s = 40s max
+          await new Promise(r => setTimeout(r, 1000));
+          attempts++;
+          try {
+            const st = await fetch(pollUrl);
+            if (!st.ok) continue;
+            const latest = await st.json();
+            if (latest.scan_status === 'done' || latest.scan_status === 'failed') {
+              // Fetch list of all measurement points and find those with parentId === mp.id
+              const listResp = await fetch(url);
+              if (!listResp.ok) break;
+              const list = await listResp.json();
+              const children = (list || []).filter(i => i.parentId === mp.id);
+              if (children.length > 0) {
+                // Map child points into frontend measurement shape and append
+                const childMeasurements = children.map(c => ({
+                  id: c.id,
+                  x: c.x,
+                  y: c.y,
+                  signalStrength: Array.isArray(c.readings) && c.readings[0] ? (c.readings[0].rssi || c.readings[0].signal_level || null) : null,
+                  ssid: (Array.isArray(c.readings) && c.readings[0]) ? (c.readings[0].ssid || '') : '',
+                  bssid: (Array.isArray(c.readings) && c.readings[0]) ? (c.readings[0].bssid || c.readings[0].mac || '') : '',
+                  timestamp: c.createdAt
+                }));
+
+                const merged = {
+                  ...this.currentProject,
+                  measurements: [...(this.currentProject.measurements || []), ...childMeasurements],
+                  updatedAt: new Date()
+                };
+                this.currentProject = merged;
+                this.projects = this.projects.map(p => p.id === merged.id ? merged : p);
+                this.saveProjects();
+                this.updateUI();
+              }
+              break;
+            }
+          } catch (e) {
+            // network error; continue polling
+          }
+        }
+      } catch (err) {
+        // Backend unreachable -> fall back to local-only creation
+        const updatedProject = {
+          ...this.currentProject,
+          measurements: [...(this.currentProject.measurements || []), measurement],
+          updatedAt: new Date()
+        };
+        this.currentProject = updatedProject;
+        this.projects = this.projects.map(p => p.id === updatedProject.id ? updatedProject : p);
+        this.saveProjects();
+        this.updateUI();
+      }
+    })();
   }
 
   handleUpdateMeasurement(id, measurement) {
