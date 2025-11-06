@@ -14,10 +14,13 @@ router.post('/', async (req, res) => {
   }
 
   try {
+    console.log('[measurementPoints] Creating measurement point', { x, y, name });
     const mp = await dataStore.createMeasurementPoint(x, y, name);
     
     // Respond immediately (keeps latency < 500ms). Start scan in background.
-    res.status(201).json(mp);
+    // Include a short statusMessage for debugging in dev UIs
+    const resp = { ...mp, statusMessage: 'created, scan scheduled' };
+    res.status(201).json(resp);
 
     // Fire-and-forget
     setImmediate(() => {
@@ -37,9 +40,12 @@ router.get('/:id', async (req, res) => {
   const id = req.params.id;
   
   try {
+    console.log('[measurementPoints] GET /:id', id);
     const mp = await dataStore.getMeasurementPoint(id);
     if (!mp) return res.status(404).json({ error: 'not_found' });
-    res.json(mp);
+    // Add a small status message to help debugging in frontend
+    const resp = { ...mp, statusMessage: `scan_status=${mp.scan_status}` };
+    res.json(resp);
   } catch (err) {
     console.error('Error getting measurement point:', err);
     res.status(500).json({ error: 'Internal server error' });
@@ -49,7 +55,10 @@ router.get('/:id', async (req, res) => {
 // List all measurement points (lightweight)
 router.get('/', async (req, res) => {
   try {
+    console.log('[measurementPoints] GET / - list all');
     const list = await dataStore.getAllMeasurementPoints();
+    // Do not change body shape (frontend expects an array). Add a header for debug info.
+    res.set('X-Status-Message', `returned ${Array.isArray(list) ? list.length : 0} measurement points`);
     res.json(list);
   } catch (err) {
     console.error('Error getting measurement points list:', err);
