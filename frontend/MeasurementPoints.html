@@ -121,8 +121,9 @@
           const rect = img.getBoundingClientRect();
           const x = e.clientX - rect.left;
           const y = e.clientY - rect.top;
-          selectedPoint = { x, y };
-          openModal('add');
+          // Instead of opening a modal for manual entry, create the point automatically
+          // and let the backend perform the Wi-Fi scan which will create per-AP child points.
+          postAutoAdd({ x, y, name: null });
         });
 
         // add markers
@@ -207,6 +208,14 @@
 
       function postAdd(measurement) {
         if (window.parent && typeof window.parent.postMessage === 'function') {
+          window.parent.postMessage({ type: 'measurement:add', measurement }, '*');
+        }
+      }
+      
+      // Used for auto-adding points: send only coordinates (name optional).
+      function postAutoAdd(measurement) {
+        if (window.parent && typeof window.parent.postMessage === 'function') {
+          // send minimal payload; backend will schedule scan
           window.parent.postMessage({ type: 'measurement:add', measurement }, '*');
         }
       }

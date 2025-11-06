@@ -53,12 +53,16 @@ async function getAllMeasurementPoints() {
     y: mp.y,
     scan_status: mp.scan_status,
     parentId: mp.parentId || null,
-    // include only the first reading as a preview to keep list small
-    readingPreview: Array.isArray(mp.readings) && mp.readings[0] ? {
-      ssid: mp.readings[0].ssid || null,
-      bssid: mp.readings[0].bssid || mp.readings[0].mac || null,
-      rssi: mp.readings[0].rssi || mp.readings[0].signal_level || null
-    } : null,
+      // Keep backward compatibility: include a `readings` array (first reading only)
+      readings: Array.isArray(mp.readings) && mp.readings[0] ? [
+        {
+          ssid: mp.readings[0].ssid || null,
+          bssid: mp.readings[0].bssid || mp.readings[0].mac || null,
+          rssi: mp.readings[0].rssi || mp.readings[0].signal_level || null,
+          frequency: mp.readings[0].frequency || null,
+          channel: mp.readings[0].channel || null
+        }
+      ] : [],
     createdAt: mp.createdAt,
     updatedAt: mp.updatedAt
   }));
