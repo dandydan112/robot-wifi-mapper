@@ -54,6 +54,13 @@
 
       <div class="actions">
         <div class="card">
+          <h4>Gem projekt</h4>
+          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+            <button id="saveProject" class="btn-primary">Gem til database</button>
+          </div>
+        </div>
+
+        <div class="card">
           <h4>Eksporter rapport</h4>
           <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
             <button id="exportPdf">Eksporter som PDF</button>
@@ -137,6 +144,82 @@
 
     document.getElementById('exportPdf').addEventListener('click', () => { alert('PDF eksport kræver backend/service - placeholder'); });
     document.getElementById('exportPng').addEventListener('click', () => { alert('PNG eksport kræver heatmap rendering - placeholder'); });
+
+    // Save project to database
+    document.getElementById('saveProject').addEventListener('click', async () => {
+      if (!project) {
+        alert('Intet projekt at gemme');
+        return;
+      }
+
+      try {
+        // Create database API client
+        const dbAPI = {
+          async saveReport(projectId, reportType, reportData) {
+            const response = await fetch(`/api/projects/${projectId}/reports`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ reportType, reportData })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+          }
+        };
+
+        // Save report with comments (optimize data size)
+        const reportData = {
+          project: {
+            id: project.id,
+            name: project.name,
+            description: project.description,
+            building: project.building,
+            status: project.status,
+            updatedAt: project.updatedAt
+          },
+          floorPlan: floorPlan ? {
+            // Don't include the large image data, just metadata
+            scaleFactor: floorPlan.scaleFactor,
+            referencePoints: floorPlan.referencePoints,
+            width: floorPlan.width,
+            height: floorPlan.height
+          } : null,
+          measurements: measurements.map(m => ({
+            x: m.x,
+            y: m.y,
+            signalStrength: m.signalStrength,
+            ssid: m.ssid,
+            frequency: m.frequency,
+            timestamp: m.timestamp
+          })),
+          comments: document.getElementById('comments').value || '',
+          stats: calculateStats(),
+          savedAt: new Date().toISOString()
+        };
+
+        await dbAPI.saveReport(project.id, 'analysis-report', reportData);
+        
+        // Show success message
+        const button = document.getElementById('saveProject');
+        const originalText = button.textContent;
+        button.textContent = '✓ Gemt!';
+        button.style.background = '#10b981';
+        
+        setTimeout(() => {
+          button.textContent = originalText;
+          button.style.background = '';
+        }, 2000);
+        
+        // Notify parent window
+        window.parent.postMessage({
+          type: 'report:saved',
+          project: project
+        }, '*');
+        
+      } catch (error) {
+        console.error('Error saving report:', error);
+        alert('Fejl ved gemning: ' + error.message);
+      }
+    });
   </script>
 </body>
 </html>

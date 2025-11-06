@@ -29,7 +29,7 @@
     <!-- Header -->
     <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px;">
       <div>
-        <h1 style="margin:0 0 8px 0;">WiFi Dækningsanalyse</h1>
+        <h1 style="margin:0 0 8px 0;">Dashboard</h1>
         <p class="muted" style="margin:0;">Oversigt over alle projekter og målinger</p>
       </div>
       <button id="createBtn" style="display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:6px; background:#0ea5a9; color:white; border:none;">+ Opret nyt projekt</button>
@@ -108,19 +108,11 @@
     (function () {
       // Projects state will be set via postMessage from the parent window.
       let projects = [];
-      // Load projects from localStorage if present
-      if (window.localStorage && localStorage.getItem('projects')) {
-        try {
-          projects = JSON.parse(localStorage.getItem('projects')) || [];
-        } catch (e) { projects = []; }
-      }
+      // Projects are now loaded from database via postMessage, not localStorage
 
       // Safe setter that re-renders the UI when projects change
       function setProjects(p) {
         projects = Array.isArray(p) ? p : [];
-        if (window.localStorage) {
-          localStorage.setItem('projects', JSON.stringify(projects));
-        }
         renderAll();
       }
 
@@ -134,9 +126,11 @@
       function getStatusText(status) {
         switch (status) {
           case 'completed': return 'Færdig';
-          case 'measuring': return 'I gang';
+          case 'measuring': return 'Målinger i gang';
+          case 'calibrated': return 'Gulvplan uploadet';
+          case 'created': return 'Oprettet';
           case 'draft': return 'Kladde';
-          default: return status || '';
+          default: return status || 'Ukendt';
         }
       }
 
@@ -144,8 +138,10 @@
         switch (status) {
           case 'completed': return 'background: #ecfdf5; color:#166534;';
           case 'measuring': return 'background: #eff6ff; color:#1e3a8a;';
+          case 'calibrated': return 'background: #fef3c7; color:#92400e;';
+          case 'created': return 'background: #f3f4f6; color:#374151;';
           case 'draft': return 'background: #f3f4f6; color:#374151;';
-          default: return '';
+          default: return 'background: #f3f4f6; color:#374151;';
         }
       }
 
@@ -186,20 +182,14 @@
           const deleteBtn = node.querySelector('.delete-btn');
           deleteBtn.addEventListener('click', function(ev) {
             ev.stopPropagation(); // Prevent card click
-            if (confirm(`Er du sikker på at du vil slette projektet \"${project.name}\"?`)) {
-              // Remove from local projects array
-              projects = projects.filter(p => p.id !== project.id);
-              if (window.localStorage) {
-                localStorage.setItem('projects', JSON.stringify(projects));
-              }
-              if (window.PROJECTS && Array.isArray(window.PROJECTS)) {
-                window.PROJECTS = window.PROJECTS.filter(p => p.id !== project.id);
-              }
-              renderAll();
-              // Notify parent
-              if (window.parent && typeof window.parent.postMessage === 'function') {
-                window.parent.postMessage({ type: 'dashboard:delete', projectId: project.id }, '*');
-              }
+            
+            // Notify parent to delete from database
+            if (window.parent && typeof window.parent.postMessage === 'function') {
+              window.parent.postMessage({ 
+                type: 'dashboard:delete', 
+                project: project,
+                projectId: project.id 
+              }, '*');
             }
           });
 
@@ -239,14 +229,8 @@
         }
       }, false);
 
-      // If parent provided initial projects via window.PROJECTS (backwards compatibility), use them
-      if (window.PROJECTS && Array.isArray(window.PROJECTS)) {
-        setProjects(window.PROJECTS);
-      } else if (window.localStorage && localStorage.getItem('projects')) {
-        setProjects(JSON.parse(localStorage.getItem('projects')));
-      } else {
-        renderAll();
-      }
+      // Initial render with empty projects (will be populated via postMessage)
+      renderAll();
     })();
   </script>
 </body>

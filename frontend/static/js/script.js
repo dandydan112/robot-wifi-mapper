@@ -2,7 +2,7 @@
 class WiFiCoverageApp {
   constructor() {
     this.currentView = 'dashboard';
-    this.projects = this.loadProjects();
+    this.projects = [];
     this.currentProject = null;
     this.showCreateDialog = false;
     
@@ -19,29 +19,117 @@ class WiFiCoverageApp {
     this.init();
   }
 
-  // Load projects from localStorage
-  loadProjects() {
+  // Load projects from database with full data
+  async loadProjects() {
     try {
-      const saved = localStorage.getItem('wifi-projects');
-      return saved ? JSON.parse(saved) : [];
+      const basicProjects = await window.dbAPI.getAllProjects();
+      
+      // For each project, load complete data
+      this.projects = await Promise.all(basicProjects.map(async (project) => {
+        return await this.loadCompleteProjectData(project);
+      }));
+      
+      this.updateUI();
+      this.sendDataToIframes(); // Send updated projects to dashboard
     } catch (err) {
-      console.error('Error loading projects:', err);
-      return [];
+      console.error('Error loading projects from database:', err);
+      this.showNotification('Fejl ved indlæsning af projekter fra database. Kontroller at backend kører.', 'error');
+      this.projects = [];
     }
   }
 
-  // Save projects to localStorage
-  saveProjects() {
+  // Load complete data for a single project
+  async loadCompleteProjectData(basicProject) {
     try {
-      localStorage.setItem('wifi-projects', JSON.stringify(this.projects));
-    } catch (err) {
-      console.error('Error saving projects:', err);
+      const [rawMeasurements, calibration, reports] = await Promise.all([
+        window.dbAPI.getMeasurements(basicProject.id).catch(() => []),
+        window.dbAPI.getCalibration(basicProject.id).catch(() => null),
+        window.dbAPI.getReports(basicProject.id).catch(() => [])
+      ]);
+
+      // Map database measurement fields to UI format
+      const measurements = (rawMeasurements || []).map(m => ({
+        id: m.id,
+        x: m.x_coordinate,
+        y: m.y_coordinate,
+        signalStrength: m.signal_strength,
+        ssid: m.ssid,
+        frequency: m.frequency,
+        timestamp: m.timestamp
+      }));
+
+      console.log(`Loading project ${basicProject.id}:`, {
+        measurements: measurements?.length || 0,
+        hasCalibration: !!calibration,
+        calibration: calibration
+      });
+
+      // Build floor plan object from calibration data
+      let floorPlan = null;
+      if (calibration && (calibration.floor_plan_image || calibration.floor_plan_file_url)) {
+        const imageData = calibration.floor_plan_image || calibration.floor_plan_file_url;
+        floorPlan = {
+          image: imageData,              // For internal use
+          imageUrl: imageData,           // For upload iframe
+          scaleFactor: calibration.scale_factor || 1,
+          referencePoints: calibration.reference_points || [],
+          fileName: calibration.floor_plan_filename,
+          fileType: calibration.floor_plan_filename?.split('.').pop() || 'unknown',
+          size: calibration.floor_plan_size,
+          isFileUpload: !!calibration.floor_plan_file_url
+        };
+      }
+
+      // Determine project status  
+      // Check if project has a status in database, otherwise infer from data
+      let status = basicProject.status || 'draft';
+      
+      // If no status set yet, infer from data
+      if (!basicProject.status) {
+        if (reports?.length > 0) {
+          status = 'completed'; // Has saved reports
+        } else if (measurements?.length > 0) {
+          status = 'draft'; // Has measurements but no report
+        } else if (floorPlan) {
+          status = 'draft'; // Has floor plan but no measurements
+        }
+      }
+
+      // Return complete project object
+      const completeProject = {
+        ...basicProject,
+        measurements: measurements || [],
+        floorPlan: floorPlan,
+        reports: reports || [],
+        status: status
+      };
+
+      console.log(`Complete project ${basicProject.id}:`, completeProject);
+      return completeProject;
+    } catch (error) {
+      console.error(`Error loading data for project ${basicProject.id}:`, error);
+      // Return basic project if loading fails
+      return {
+        ...basicProject,
+        measurements: [],
+        floorPlan: null,
+        reports: [],
+        status: 'created'
+      };
     }
   }
 
-  init() {
+  // Save projects to database
+  async saveProjects() {
+    // Dette er nu håndteret individuelt i hver metode
+    // Behøver ikke at gemme hele projektet array hver gang
+    return true;
+  }
+
+  async init() {
     this.setupEventListeners();
     this.setupIframeReferences();
+    await this.loadProjects(); // Load from database
     this.updateUI();
     
     // Show getting started guide if no projects exist
@@ -80,6 +168,12 @@ class WiFiCoverageApp {
 
   setCurrentView(view) {
     this.currentView = view;
+    
+    // Reload projects when going to dashboard to ensure fresh data
+    if (view === 'dashboard') {
+      this.loadProjects();
+    }
+    
     this.updateUI();
   }
 
@@ -232,6 +326,17 @@ class WiFiCoverageApp {
         this.handleSelectProject(data.project);
       }
     }
+    if (data.type === 'dashboard:delete') {
+      if (data.project) {
+        this.handleDeleteProject(data.project);
+      } else if (data.projectId) {
+        // Find project by ID and delete it
+        const project = this.projects.find(p => p.id == data.projectId);
+        if (project) {
+          this.handleDeleteProject(project);
+        }
+      }
+    }
 
     // Upload events
     if (data.type === 'upload:floorPlanUploaded') {
@@ -288,6 +393,12 @@ class WiFiCoverageApp {
     if (data.type === 'report:ready') {
       this.sendDataToIframes();
     }
+    if (data.type === 'report:saved') {
+      // When report is saved, mark project as completed
+      if (this.currentProject) {
+        this.handleReportSaved(data.project);
+      }
+    }
 
     // Create project dialog events
     if (data.type === 'createProject:create') {
@@ -311,54 +422,197 @@ class WiFiCoverageApp {
   }
 
   // Project management methods
-  handleCreateProject(project) {
-    this.projects.push(project);
-    this.currentProject = project;
-    this.saveProjects();
-    this.setCurrentView('upload');
-    this.updateUI();
+  async handleCreateProject(project) {
+    try {
+      const newProject = await window.dbAPI.createProject(project.name, project.description);
+      // Create complete project structure
+      const fullProject = {
+        ...project,
+        id: newProject.id,
+        created_at: newProject.created_at,
+        updated_at: newProject.updated_at,
+        measurements: [],
+        floorPlan: null,
+        reports: [],
+        status: 'draft' // All new projects start as draft
+      };
+      this.projects.push(fullProject);
+      this.currentProject = fullProject;
+      this.setCurrentView('upload');
+      this.updateUI();
+      this.sendDataToIframes(); // Send to all iframes including dashboard
+      this.showNotification('Projekt oprettet succesfuldt', 'success');
+    } catch (error) {
+      console.error('Error creating project:', error);
+      this.showNotification('Fejl ved oprettelse af projekt: ' + error.message, 'error');
+    }
   }
 
-  handleSelectProject(project) {
-    this.currentProject = project;
-    this.setCurrentView('upload');
-    this.updateUI();
+  async handleSelectProject(project) {
+    console.log('Selecting project with data:', project);
+    
+    // Always load fresh data from database when selecting a project
+    try {
+      const freshProject = await this.loadCompleteProjectData(project);
+      this.currentProject = freshProject;
+      
+      console.log('Fresh project data loaded:', freshProject);
+      
+      // Determine which view to show based on project data
+      if (freshProject.measurements && freshProject.measurements.length > 0) {
+        this.setCurrentView('heatmap'); // Has data, show heatmap
+      } else if (freshProject.floorPlan) {
+        this.setCurrentView('measurements'); // Has floor plan, ready for measurements
+      } else {
+        this.setCurrentView('upload'); // No floor plan, start with upload
+      }
+      
+      this.updateUI();
+      this.sendDataToIframes(); // Send all data to iframes
+    } catch (error) {
+      console.error('Error loading project data:', error);
+      this.showNotification('Fejl ved indlæsning af projekt data', 'error');
+    }
   }
 
-  handleFloorPlanUploaded(floorPlan) {
+  async handleDeleteProject(project) {
+    try {
+      console.log('Attempting to delete project:', project);
+      
+      // Confirm deletion
+      if (!confirm(`Er du sikker på at du vil slette projektet "${project.name}"? Dette kan ikke fortrydes.`)) {
+        return;
+      }
+
+      console.log('Deleting project from database, ID:', project.id);
+      
+      // Delete from database
+      await window.dbAPI.deleteProject(project.id);
+      
+      console.log('Successfully deleted from database, updating local list');
+      
+      // Remove from local projects array
+      this.projects = this.projects.filter(p => p.id !== project.id);
+      
+      // If this was the current project, clear it
+      if (this.currentProject && this.currentProject.id === project.id) {
+        this.currentProject = null;
+        this.setCurrentView('dashboard');
+      }
+      
+      this.updateUI();
+      this.showNotification('Projekt slettet succesfuldt', 'success');
+      
+      console.log('Project deletion completed, remaining projects:', this.projects.length);
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      this.showNotification('Fejl ved sletning af projekt: ' + error.message, 'error');
+    }
+  }
+
+  async handleFloorPlanUploaded(floorPlan) {
     if (!this.currentProject) return;
     
-    const updatedProject = {
-      ...this.currentProject,
-      floorPlan,
-      status: 'measuring',
-      updatedAt: new Date()
-    };
-    
-    this.currentProject = updatedProject;
-    this.projects = this.projects.map(p => p.id === updatedProject.id ? updatedProject : p);
-    this.saveProjects();
-    this.updateUI();
+    try {
+      // Map the property names from the upload iframe format
+      let floorPlanData = floorPlan.imageUrl || floorPlan.image;
+      const scaleFactor = floorPlan.scaleFactor || 1;
+      const referencePoints = floorPlan.referencePoints || [];
+      
+      // Hvis billedet er for stort (>10MB base64), upload som fil i stedet
+      if (floorPlanData && floorPlanData.length > 10 * 1024 * 1024) {
+        this.showNotification('Uploadér stor fil...', 'info');
+        
+        // Konverter base64 til blob og upload
+        const base64Data = floorPlanData.split(',')[1];
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: 'image/png' });
+        const file = new File([blob], 'floorplan.png', { type: 'image/png' });
+        
+        const uploadResult = await window.fileUploadAPI.uploadFile(file, (progress) => {
+          console.log(`Upload progress: ${progress}%`);
+        });
+        
+        floorPlanData = uploadResult.file;
+        this.showNotification('Fil uploadet succesfuldt', 'success');
+      }
+      
+      // Save calibration data to database
+      console.log('Saving calibration:', {
+        projectId: this.currentProject.id,
+        floorPlanDataType: typeof floorPlanData,
+        floorPlanDataIsObject: typeof floorPlanData === 'object',
+        scaleFactor: scaleFactor,
+        referencePoints: referencePoints
+      });
+      await window.dbAPI.saveCalibration(this.currentProject.id, floorPlanData, scaleFactor, referencePoints);
+      
+      const updatedProject = {
+        ...this.currentProject,
+        floorPlan: {
+          image: floorPlanData,          // For internal use
+          imageUrl: floorPlanData,       // For upload iframe
+          scaleFactor: scaleFactor,
+          referencePoints: referencePoints,
+          fileName: floorPlan.fileName,
+          fileType: floorPlan.fileType,
+          width: floorPlan.width,
+          height: floorPlan.height
+        },
+        status: 'draft', // Still draft until explicitly saved
+        updatedAt: new Date()
+      };
+      
+      this.currentProject = updatedProject;
+      this.projects = this.projects.map(p => p.id === updatedProject.id ? updatedProject : p);
+      this.updateUI();
+      this.sendDataToIframes(); // Send updated data to all iframes
+      this.showNotification('Gulvplan uploadet og gemt', 'success');
+    } catch (error) {
+      console.error('Error saving floor plan:', error);
+      this.showNotification('Fejl ved gemning af gulvplan: ' + error.message, 'error');
+    }
   }
 
-  handleAddMeasurement(measurement) {
+  async handleAddMeasurement(measurement) {
     if (!this.currentProject) return;
     
-    const updatedProject = {
-      ...this.currentProject,
-      measurements: [...(this.currentProject.measurements || []), measurement],
-      updatedAt: new Date()
-    };
-    
-    this.currentProject = updatedProject;
-    this.projects = this.projects.map(p => p.id === updatedProject.id ? updatedProject : p);
-    this.saveProjects();
-    this.updateUI();
+    try {
+      // Save measurement to database
+      await window.dbAPI.addMeasurement(this.currentProject.id, {
+        x: measurement.x,
+        y: measurement.y,
+        signalStrength: measurement.signalStrength,
+        ssid: measurement.ssid,
+        frequency: measurement.frequency
+      });
+      
+      const updatedProject = {
+        ...this.currentProject,
+        measurements: [...(this.currentProject.measurements || []), measurement],
+        status: 'draft', // Still draft until explicitly saved
+        updatedAt: new Date()
+      };
+      
+      this.currentProject = updatedProject;
+      this.projects = this.projects.map(p => p.id === updatedProject.id ? updatedProject : p);
+      this.updateUI();
+      this.sendDataToIframes(); // Update dashboard
+    } catch (error) {
+      console.error('Error saving measurement:', error);
+      this.showNotification('Fejl ved gemning af måling: ' + error.message, 'error');
+    }
   }
 
   handleUpdateMeasurement(id, measurement) {
     if (!this.currentProject) return;
     
+    // For now, just update locally - could add database update later
     const updatedProject = {
       ...this.currentProject,
       measurements: (this.currentProject.measurements || []).map(m => m.id === id ? measurement : m),
@@ -367,13 +621,13 @@ class WiFiCoverageApp {
     
     this.currentProject = updatedProject;
     this.projects = this.projects.map(p => p.id === updatedProject.id ? updatedProject : p);
-    this.saveProjects();
     this.updateUI();
   }
 
   handleDeleteMeasurement(id) {
     if (!this.currentProject) return;
     
+    // For now, just update locally - could add database delete later
     const updatedProject = {
       ...this.currentProject,
       measurements: (this.currentProject.measurements || []).filter(m => m.id !== id),
@@ -382,8 +636,31 @@ class WiFiCoverageApp {
     
     this.currentProject = updatedProject;
     this.projects = this.projects.map(p => p.id === updatedProject.id ? updatedProject : p);
-    this.saveProjects();
     this.updateUI();
+  }
+
+  async handleReportSaved(reportData) {
+    if (!this.currentProject) return;
+    
+    try {
+      // Mark project as completed when report is saved
+      await window.dbAPI.updateProjectStatus(this.currentProject.id, 'completed');
+      
+      const updatedProject = {
+        ...this.currentProject,
+        status: 'completed',
+        updatedAt: new Date()
+      };
+      
+      this.currentProject = updatedProject;
+      this.projects = this.projects.map(p => p.id === updatedProject.id ? updatedProject : p);
+      this.updateUI();
+      this.sendDataToIframes(); // Update dashboard
+      this.showNotification('Projekt gemt succesfuldt', 'success');
+    } catch (error) {
+      console.error('Error updating project status:', error);
+      this.showNotification('Fejl ved gemning af projektstatus: ' + error.message, 'error');
+    }
   }
 
   // Dialog management

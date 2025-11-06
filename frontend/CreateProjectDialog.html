@@ -5,40 +5,115 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Opret projekt</title>
   <style>
-    body { font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin: 0; padding: 16px; background: #fff; color: #111; }
-    .container { max-width: 720px; margin: 24px auto; }
-    label { display:block; font-weight:600; margin-bottom:6px }
-    input, textarea { width:100%; padding:8px 10px; border:1px solid #ddd; border-radius:6px; box-sizing: border-box }
-    .row { margin-bottom:12px }
-    .actions { display:flex; gap:8px; justify-content:flex-end }
-    button { padding:8px 12px; border-radius:6px; border:0; cursor:pointer }
+    body { 
+      font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; 
+      margin: 0; 
+      padding: 16px 20px; /* Øget horizontal padding */
+      background: #fff; 
+      color: #111; 
+      min-height: 100vh;
+      box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden; /* Forhindrer scroll */
+    }
+    .container { 
+      max-width: 720px; /* Øget fra 640px */
+      margin: 0 auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 100%;
+      width: 100%; /* Sikrer fuld bredde */
+    }
+    .content {
+      flex: 0; /* Ikke voksende - kun så stor som nødvendigt */
+    }
+    h2 {
+      margin: 0 0 8px 0; /* Reduceret fra 12px */
+      font-size: 1.5rem; /* Reduceret fra 1.6rem */
+    }
+    label { 
+      display:block; 
+      font-weight:600; 
+      margin-bottom:6px; /* Reduceret fra 8px */
+      font-size: 14px;
+    }
+    input, textarea { 
+      width:100%; 
+      padding:10px 12px; /* Reduceret fra 12px 14px */
+      border:1px solid #ddd; 
+      border-radius:8px;
+      box-sizing: border-box;
+      font-size: 15px;
+      line-height: 1.4;
+    }
+    .row { 
+      margin-bottom:14px; /* Reduceret fra 18px */
+    }
+    .row:last-of-type { 
+      margin-bottom: 0; /* Ingen margin på sidste felt */
+    }
+    .actions { 
+      display:flex; 
+      gap:12px;
+      justify-content:flex-end;
+      padding-top: 12px; /* Reduceret fra 16px */
+      border-top: 1px solid #f0f0f0;
+      margin-top: 0px; /* Fjernet mellemrum */
+      flex-shrink: 0; /* Forhindrer at knapperne skrumper */
+    }
+    button { 
+      padding:11px 18px; /* Lidt reduceret fra 12px 20px */
+      border-radius:8px;
+      border:0; 
+      cursor:pointer;
+      font-size: 15px;
+      font-weight: 500;
+      min-width: 95px; /* Lidt reduceret fra 100px */
+    }
     .btn-primary { background:#0ea5a4; color:#fff }
-    .btn-ghost { background:transparent; border:1px solid #ddd }
-    .muted { color:#6b7280; font-size:13px }
+    .btn-primary:hover { background:#0d9488; }
+    .btn-ghost { background:transparent; border:1px solid #ddd; color:#666; }
+    .btn-ghost:hover { background:#f5f5f5; }
+    .muted { 
+      color:#6b7280; 
+      font-size:14px;
+      margin-bottom: 16px; /* Reduceret fra 20px */
+      line-height: 1.4; /* Reduceret fra 1.5 */
+    }
+    textarea {
+      resize: vertical;
+      min-height: 70px; /* Reduceret fra 80px */
+      max-height: 70px; /* Fast højde - ingen resize */
+      font-family: inherit;
+    }
   </style>
 </head>
 <body>
   <div class="container">
-    <h2>Opret nyt projekt</h2>
-    <p class="muted">Indtast projektinformation for at komme i gang</p>
-    <form id="createForm">
-      <div class="row">
-        <label for="name">Projektnavn *</label>
-        <input id="name" name="name" required placeholder="f.eks. Kontorhus København" />
-      </div>
-      <div class="row">
-        <label for="building">Bygning *</label>
-        <input id="building" name="building" required placeholder="f.eks. Hovedkontor" />
-      </div>
-      <div class="row">
-        <label for="description">Beskrivelse</label>
-        <textarea id="description" name="description" rows="4" placeholder="Kort beskrivelse af projektet..."></textarea>
-      </div>
-      <div class="actions">
-        <button type="button" id="cancel" class="btn-ghost">Annuller</button>
-        <button type="submit" id="create" class="btn-primary">Opret projekt</button>
-      </div>
-    </form>
+    <div class="content">
+      <h2>Opret nyt projekt</h2>
+      <p class="muted">Indtast projektinformation for at komme i gang</p>
+      <form id="createForm">
+        <div class="row">
+          <label for="name">Projektnavn *</label>
+          <input id="name" name="name" required placeholder="f.eks. Kontorhus København" />
+        </div>
+        <div class="row">
+          <label for="building">Bygning *</label>
+          <input id="building" name="building" required placeholder="f.eks. Hovedkontor" />
+        </div>
+        <div class="row">
+          <label for="description">Beskrivelse</label>
+          <textarea id="description" name="description" rows="3" placeholder="Kort beskrivelse af projektet..."></textarea>
+        </div>
+      </form>
+    </div>
+    <div class="actions">
+      <button type="button" id="cancel" class="btn-ghost">Annuller</button>
+      <button type="submit" form="createForm" id="create" class="btn-primary">Opret projekt</button>
+    </div>
   </div>
 
   <script>
