@@ -119,24 +119,21 @@
         const wrapper = document.createElement('div');
         wrapper.style.position = 'relative';
         wrapper.appendChild(img);
-        
-        // Wait for image to load to get accurate dimensions
+
         img.onload = function() {
-          const displayedWidth = img.offsetWidth;
-          const displayedHeight = img.offsetHeight;
-          const originalWidth = floorPlan.width || img.naturalWidth;
-          const originalHeight = floorPlan.height || img.naturalHeight;
-          
+          const displayedWidth = img.offsetWidth || img.clientWidth || img.naturalWidth;
+          const displayedHeight = img.offsetHeight || img.clientHeight || img.naturalHeight;
+          const originalWidth = floorPlan.width || img.naturalWidth || displayedWidth;
+          const originalHeight = floorPlan.height || img.naturalHeight || displayedHeight;
+
+          // Click handler: convert displayed coords -> original image coords and auto-add
           wrapper.addEventListener('click', function(e){
             const rect = img.getBoundingClientRect();
             const clickX = e.clientX - rect.left;
             const clickY = e.clientY - rect.top;
-            
-            // Convert displayed coordinates to original image coordinates
             const x = (clickX / displayedWidth) * originalWidth;
             const y = (clickY / displayedHeight) * originalHeight;
-            selectedPoint = { x, y };
-            openModal('add');
+            postAutoAdd({ x, y, name: null });
           });
 
           // add markers - convert from original coordinates to display coordinates
@@ -147,8 +144,8 @@
             const displayY = (m.y / originalHeight) * displayedHeight;
             dot.style.left = displayX + 'px';
             dot.style.top = displayY + 'px';
-            dot.style.background = m.signalStrength >= -60 ? '#22c55e' : (m.signalStrength >= -70 ? '#eab308' : '#ef4444');
-            dot.title = m.signalStrength + ' dBm';
+            dot.style.background = (typeof m.signalStrength === 'number' && m.signalStrength >= -60) ? '#22c55e' : ((typeof m.signalStrength === 'number' && m.signalStrength >= -70) ? '#eab308' : '#ef4444');
+            dot.title = (m.signalStrength !== null && m.signalStrength !== undefined) ? (m.signalStrength + ' dBm') : '';
             dot.addEventListener('click', function(ev){ ev.stopPropagation(); openModal('edit', m); });
             wrapper.appendChild(dot);
           });
@@ -224,6 +221,14 @@
 
       function postAdd(measurement) {
         if (window.parent && typeof window.parent.postMessage === 'function') {
+          window.parent.postMessage({ type: 'measurement:add', measurement }, '*');
+        }
+      }
+      
+      // Used for auto-adding points: send only coordinates (name optional).
+      function postAutoAdd(measurement) {
+        if (window.parent && typeof window.parent.postMessage === 'function') {
+          // send minimal payload; backend will schedule scan
           window.parent.postMessage({ type: 'measurement:add', measurement }, '*');
         }
       }

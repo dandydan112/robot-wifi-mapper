@@ -581,31 +581,104 @@ class WiFiCoverageApp {
 
   async handleAddMeasurement(measurement) {
     if (!this.currentProject) return;
-    
+    // Try backend path first (preferred). If backend not available, fall back to local DB API.
     try {
-      // Save measurement to database
-      await window.dbAPI.addMeasurement(this.currentProject.id, {
-        x: measurement.x,
-        y: measurement.y,
-        signalStrength: measurement.signalStrength,
-        ssid: measurement.ssid,
-        frequency: measurement.frequency
+      const base = (window.location && window.location.origin) ? window.location.origin : '';
+      const url = base + '/api/measurement-points';
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ x: measurement.x, y: measurement.y, name: measurement.ssid || measurement.name || null })
       });
-      
-      const updatedProject = {
+
+      if (!resp.ok) throw new Error('Backend rejected measurement');
+      const mp = await resp.json();
+
+      // Add pending measurement locally so user sees it immediately
+      const pending = {
+        id: mp.id,
+        x: mp.x,
+        y: mp.y,
+        signalStrength: null,
+        ssid: mp.name || '',
+        bssid: null,
+        timestamp: mp.createdAt
+      };
+
+      this.currentProject = {
         ...this.currentProject,
-        measurements: [...(this.currentProject.measurements || []), measurement],
-        status: 'draft', // Still draft until explicitly saved
+        measurements: [...(this.currentProject.measurements || []), pending],
         updatedAt: new Date()
       };
-      
-      this.currentProject = updatedProject;
-      this.projects = this.projects.map(p => p.id === updatedProject.id ? updatedProject : p);
+      this.projects = this.projects.map(p => p.id === this.currentProject.id ? this.currentProject : p);
+      this.saveProjects();
       this.updateUI();
-      this.sendDataToIframes(); // Update dashboard
-    } catch (error) {
-      console.error('Error saving measurement:', error);
-      this.showNotification('Fejl ved gemning af måling: ' + error.message, 'error');
+
+      // Poll backend for scan completion then fetch children
+      const pollUrl = url + '/' + mp.id;
+      let attempts = 0;
+      while (attempts < 40) {
+        await new Promise(r => setTimeout(r, 1000));
+        attempts++;
+        try {
+          const st = await fetch(pollUrl);
+          if (!st.ok) continue;
+          const latest = await st.json();
+          if (latest.scan_status === 'done' || latest.scan_status === 'failed') {
+            const listResp = await fetch(url);
+            if (!listResp.ok) break;
+            const list = await listResp.json();
+            const children = (list || []).filter(i => i.parentId === mp.id);
+            if (children.length > 0) {
+              const childMeasurements = children.map(c => ({
+                id: c.id,
+                x: c.x,
+                y: c.y,
+                signalStrength: Array.isArray(c.readings) && c.readings[0] ? (c.readings[0].rssi || c.readings[0].signal_level || null) : null,
+                ssid: (Array.isArray(c.readings) && c.readings[0]) ? (c.readings[0].ssid || '') : '',
+                bssid: (Array.isArray(c.readings) && c.readings[0]) ? (c.readings[0].bssid || c.readings[0].mac || '') : '',
+                timestamp: c.createdAt
+              }));
+
+              this.currentProject = {
+                ...this.currentProject,
+                measurements: [...(this.currentProject.measurements || []), ...childMeasurements],
+                updatedAt: new Date()
+              };
+              this.projects = this.projects.map(p => p.id === this.currentProject.id ? this.currentProject : p);
+              this.saveProjects();
+              this.updateUI();
+            }
+            break;
+          }
+        } catch (e) {
+          // network error; keep polling
+        }
+      }
+    } catch (err) {
+      // Fallback: save locally via dbAPI
+      try {
+        await window.dbAPI.addMeasurement(this.currentProject.id, {
+          x: measurement.x,
+          y: measurement.y,
+          signalStrength: measurement.signalStrength,
+          ssid: measurement.ssid,
+          frequency: measurement.frequency
+        });
+
+        this.currentProject = {
+          ...this.currentProject,
+          measurements: [...(this.currentProject.measurements || []), measurement],
+          status: 'draft',
+          updatedAt: new Date()
+        };
+        this.projects = this.projects.map(p => p.id === this.currentProject.id ? this.currentProject : p);
+        this.saveProjects();
+        this.updateUI();
+      } catch (dbErr) {
+        console.error('Error saving measurement locally:', dbErr);
+        this.showNotification('Fejl ved gemning af måling: ' + (dbErr.message || dbErr), 'error');
+      }
     }
   }
 

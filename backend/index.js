@@ -4,6 +4,7 @@ const multer = require('multer');
 const fs = require('fs');
 const { initDb, projectDb, db } = require('./database/db');
 const dbBackup = require('./database/backup');
+const measurementPointsRouter = require('./routes/measurementPoints');
 const app = express();
 
 // Opret uploads directory hvis den ikke findes
@@ -14,32 +15,22 @@ if (!fs.existsSync(uploadsDir)) {
 
 // Multer konfiguration til fil uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
+  destination: (req, file, cb) => cb(null, uploadsDir),
   filename: (req, file, cb) => {
-    // Generer unikt filnavn med timestamp
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
   }
 });
 
 const upload = multer({ 
-  storage: storage,
-  limits: {
-    fileSize: 100 * 1024 * 1024, // 100MB grænse
-  },
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
   fileFilter: (req, file, cb) => {
-    // Tillad billede og PDF filer
     const allowedTypes = /jpeg|jpg|png|gif|pdf|svg/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype) || file.mimetype === 'application/pdf';
-    
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('Kun billeder og PDF filer er tilladt'));
-    }
+    if (mimetype && extname) return cb(null, true);
+    cb(new Error('Kun billeder og PDF filer er tilladt'));
   }
 });
 
@@ -318,6 +309,9 @@ app.post('/api/database/copy', (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
+// Mount measurement-points router
+app.use('/api/measurement-points', measurementPointsRouter);
 
 // In production you might serve built frontend from backend/static
 if (process.env.NODE_ENV === 'production') {
