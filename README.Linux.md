@@ -37,12 +37,6 @@ npm run dev:frontend
 npm run dev
 ```
 
-Verify
-
-```bash
-curl http://localhost:4000/api/health
-# expect: { "status": "ok", "time": "..." }
-```
 
 Notes
 - `better-sqlite3` requires Node 20+, so prefer Node 20 to avoid engine warnings.
