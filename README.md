@@ -1,53 +1,140 @@
-# WiFi Coverage Analysis App
+## Quickstart:
+### Prerequisites
+- Node.js installed
 
-This repository contains the WiFi Coverage Analysis application. It provides a frontend UI (Vite) and a Node.js/Express backend that can perform Wi‑Fi scans and persist project data in a local SQLite database.
-
-Live design reference: https://www.figma.com/design/2gDoUgJelg9ApQjKj2Qk1W/WiFi-Coverage-Analysis-App
-
-## Quickstart
-
-Prerequisites:
-- Node.js (LTS recommended)
-
-Installation:
+### Installation
 1. Run `npm i` to install dependencies
 
-Run the app:
-1. Run `npm run dev` to start both backend and frontend (concurrently). The frontend runs on Vite (default http://localhost:5173) and the backend listens on the configured port (usually 4000).
+## Running the code
+2. Run `npm run dev` to start development servers (frontend + backend)
 
-Testing:
-- A small test script is provided for quick Wi‑Fi scan checks (if available): `node backend/debug_scan.js`
-
-## Features
-
-- Frontend app to create projects, upload floor plans, add measurement points and generate heatmaps.
-- Backend can perform Wi‑Fi scans and automatically create per-AP child measurement points for each scan.
-- Stores projects, measurements, calibration and reports in a local SQLite database.
-- Large file handling: uploads larger than ~10MB are stored as files in `backend/uploads/` and the database stores file URLs instead of base64.
+### Testing
+Run `node test-signalstyrke.js` in root to test the signal strength API
 
 ## Important paths
 
 - Database file (SQLite): `wifi-mapper.db` in project root (when enabled).
 - Uploads directory: `backend/uploads/` (for large floorplans/files).
 
-## API Highlights
+### API Endpoints (full list)
 
-- `POST /api/measurement-points` - Create a measurement point and trigger a Wi‑Fi scan (backend will create per-AP child points).
-- `GET /api/measurement-points/:id` - Get a measurement point and its scan status/data.
-- `GET /api/measurement-points` - List all measurement points.
-- `GET /api/health` - Health check endpoint.
+Below is a full list of backend API endpoints implemented in this project. Paths are relative to the server root (for development the server listens on port 4000 by default).
 
-## Dependencies
+General notes:
+- All responses are JSON unless otherwise stated.
+- Large payloads (uploads/base64) are accepted where noted; backend accepts JSON payloads with up to ~100MB.
 
-- express - Web server framework
-- node-wifi - Wi‑Fi scanning (platform dependent)
-- concurrently - Run frontend and backend together during development
-- vite - Frontend dev server/build tool
-- sqlite3 / better-sqlite3 - SQLite drivers used for persistence
+Endpoints:
 
-## Notes
+- GET /api/health
+	- Description: Health check. Returns server status and timestamp.
+	- Response: { status: 'ok', time: '<ISO timestamp>' }
 
-- The project contains both a legacy localStorage code path and a newer SQLite-backed path. In development the app prefers the SQLite/database-backed APIs when available.
+- POST /api/upload
+	- Description: Upload a file (floorplan or other). Multipart/form-data with field `file`.
+	- Accepts: image/jpeg, image/png, image/gif, image/svg, application/pdf
+	- Response: { message, file: { filename, originalname, mimetype, size, url } }
 
-If you hit issues starting the dev servers, check `package.json` for the `dev` script and ensure no other process is locking the backend port (default 4000). Use PowerShell to find/stop processes if needed.
+- DELETE /api/uploads/:filename
+	- Description: Delete an uploaded file by filename.
+	- Response: { message: 'Fil slettet' }
+
+- POST /api/projects
+	- Description: Create a project.
+	- Body: { name: string, description?: string }
+	- Response: { id, name, description }
+
+- GET /api/projects
+	- Description: List all projects.
+	- Response: [ { id, name, description, ... } ]
+
+- GET /api/projects/:id
+	- Description: Get project details.
+	- Response: { id, name, description, ... }
+
+- PUT /api/projects/:id
+	- Description: Update project's name/description.
+	- Body: { name, description }
+	- Response: { id, name, description }
+
+- PATCH /api/projects/:id/status
+	- Description: Update the project's status (e.g. 'draft', 'measuring', 'completed').
+	- Body: { status: string }
+	- Response: { id, status }
+
+- DELETE /api/projects/:id
+	- Description: Delete a single project and related data.
+	- Response: { message }
+
+- DELETE /api/projects
+	- Description: Admin endpoint to delete all projects and related tables (measurements, calibrations, reports).
+	- Response: { message, deletedProjects }
+
+- POST /api/projects/:id/measurements
+	- Description: Add a raw measurement to a project (legacy/local DB route).
+	- Body: { x: number, y: number, signalStrength?: number, ssid?: string, frequency?: number }
+	- Response: { id }
+
+- GET /api/projects/:id/measurements
+	- Description: Get all measurements for a project.
+	- Response: [ { id, x, y, signalStrength, ssid, frequency, timestamp } ]
+
+- POST /api/projects/:id/calibration
+	- Description: Save calibration / floor plan data for a project. The body may include base64 image data or a file URL (if uploaded).
+	- Body example: { floorPlanImage: '<base64 or url>', scaleFactor?: number, referencePoints?: [ ... ] }
+	- Response: { message }
+
+- GET /api/projects/:id/calibration
+	- Description: Get calibration data for a project.
+	- Response: { floor_plan_image|floor_plan_file_url, scale_factor, reference_points, ... }
+
+- POST /api/projects/:id/reports
+	- Description: Save a generated report (JSON payload depends on report type).
+	- Body: { reportType: string, reportData: object }
+	- Response: { id }
+
+- GET /api/projects/:id/reports
+	- Description: List saved reports for a project.
+	- Response: [ { id, reportType, createdAt, ... } ]
+
+- GET /api/database/info
+	- Description: Database information and stats (when DB-backed mode is active).
+	- Response: object with DB metadata.
+
+- POST /api/database/export
+	- Description: Export the database to a JSON file in `exports/`.
+	- Response: { message, filename, path }
+
+- POST /api/database/copy
+	- Description: Copy the database file to `exports/` with a timestamped name.
+	- Response: { message, filename, path }
+
+Measurement points (scan-centric API)
+- POST /api/measurement-points
+	- Description: Create a measurement point and schedule a Wi‑Fi scan. The endpoint responds immediately with the created point; the scan runs in background and the server will create per-AP child measurement points when complete.
+	- Body: { x: number, y: number, name?: string }
+	- Response: created measurement point object (id, x, y, scan_status:'pending', createdAt ...)
+
+- GET /api/measurement-points/:id
+	- Description: Get a measurement point and its scan status/data.
+	- Response: full measurement point object (includes scan_status, readings array when available)
+
+- GET /api/measurement-points
+	- Description: List all measurement points (lightweight objects). Each entry includes a small `readings` preview (first reading only) and `parentId` when the point is a child created from a scan.
+	- Response: [ { id, name, x, y, scan_status, parentId, readings: [ { ssid, bssid, rssi, frequency } ], createdAt } ]
+
+
+### Dependencies
+- `express` - Web server framework
+- `node-wifi` - Cross-platform Wi-Fi scanning
+- `concurrently` - Run multiple commands
+- `vite` - Frontend build tool  
+- `sqlite3 / better-sqlite3` - SQLite drivers used for persistence 
+
+
+
+
+
+
+
 
