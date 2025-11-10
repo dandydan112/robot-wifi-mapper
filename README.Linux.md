@@ -37,13 +37,3 @@ npm run dev:frontend
 npm run dev
 ```
 
-
-Notes
-- `better-sqlite3` requires Node 20+, so prefer Node 20 to avoid engine warnings.
-- `node-wifi` uses `nmcli`/`iwlist`; ensure `nmcli`/`iwlist` exist. If scans fail due to permissions you can run the server as root or give node capabilities:
-
-```bash
-sudo setcap cap_net_raw,cap_net_admin+eip "$(which node)"
-```
-
-- Database: SQLite files are created in `backend/database/`. Exports/backups go to `exports/`.
