@@ -210,5 +210,10 @@ __marimo__/
 node_modules/
 package-lock.json
 
+# Ignore SQLite database files and journals (they are local runtime artifacts)
+backend/database/*.db
+backend/database/*.db-shm
+backend/database/*.db-wal
+
 # Data files
 backend/data.json
