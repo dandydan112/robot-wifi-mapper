@@ -77,11 +77,20 @@
   const maxVal = document.getElementById('maxVal');
 
       function getAccessPoints() {
+        // Build a deduplicated list of access points keyed by SSID when available,
+        // otherwise fall back to BSSID. We return a representative bssid for each ssid.
         const map = new Map();
         measurements.forEach(m => {
           const b = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || null;
-          const s = m.ssid || (m.readings && m.readings[0] && m.readings[0].ssid) || '';
-          if (b) map.set(b, { bssid: b, ssid: s });
+          const s = (m.ssid || (m.readings && m.readings[0] && m.readings[0].ssid) || '').trim();
+          const key = s || b || null;
+          if (!key) return;
+          if (!map.has(key)) {
+            map.set(key, { key, ssid: s || null, bssid: b || null, count: 1 });
+          } else {
+            const entry = map.get(key);
+            entry.count = (entry.count || 0) + 1;
+          }
         });
         return Array.from(map.values());
       }
@@ -129,12 +138,23 @@
           const minFilter = parseFloat(minRssi.value);
           const maxFilter = parseFloat(maxRssi.value);
 
+          // Helper to compute the same key used by the AP list (SSID or BSSID)
+          const getKeyForMeasurement = (m) => {
+            const b = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || null;
+            const s = (m.ssid || (m.readings && m.readings[0] && m.readings[0].ssid) || '').trim();
+            return s || b || null;
+          };
+
+          // Build base set filtered by selected checkboxes in the UI (read live)
           let base = measurements;
           if (!show) {
-            // filter by selectedAPs set
+            const checkedInputs = Array.from(apList.querySelectorAll('input[type=checkbox][data-key]'))
+              .filter(i => i.checked)
+              .map(i => i.dataset.key);
+            const uiSet = new Set(checkedInputs);
             base = measurements.filter(m => {
-              const b = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || null;
-              return b && selectedAPs.has(b);
+              const key = getKeyForMeasurement(m);
+              return key && uiSet.has(key);
             });
           }
 
@@ -198,7 +218,18 @@
         selectedAPs.clear();
         if (!aps || aps.length === 0) {
           apList.textContent = 'Ingen adgangspunkter fundet';
+          apSelectWrap.style.display = 'none';
           return;
+        }
+
+        // Only show the AP checkbox UI when there are many distinct SSIDs
+        // (user requested a checkbox list when ~10 unique SSIDs detected). Use
+        // a threshold so the UI doesn't clutter for small numbers.
+  const SHOW_THRESHOLD = 1;
+        apSelectWrap.style.display = (aps.length >= SHOW_THRESHOLD) ? 'block' : 'none';
+        if (apSelectWrap.style.display === 'none') {
+          // If we're hiding the AP selection UI, ensure "showAll" is checked
+          showAll.checked = true;
         }
 
         // Map to keep input references by BSSID
@@ -209,8 +240,8 @@
         allLabel.style.display = 'block';
         allLabel.style.marginBottom = '8px';
         const allInput = document.createElement('input');
-        allInput.type = 'checkbox';
-        allInput.checked = true;
+  allInput.type = 'checkbox';
+  allInput.checked = true;
         allInput.style.marginRight = '6px';
         allLabel.appendChild(allInput);
         allLabel.appendChild(document.createTextNode('Vælg alle'));
@@ -231,17 +262,19 @@
           label.style.marginBottom = '6px';
           const input = document.createElement('input');
           input.type = 'checkbox';
-          input.dataset.bssid = ap.bssid;
+          // Use the dedupe key (SSID or BSSID) as dataset key
+          input.dataset.key = ap.key;
           input.checked = true;
           input.style.marginRight = '6px';
           label.appendChild(input);
-          label.appendChild(document.createTextNode(`${ap.ssid || ''} (${ap.bssid.slice(0,8)})`));
+          const labelText = ap.ssid ? `${ap.ssid} (${(ap.bssid||'').slice(0,8)})` : (ap.bssid || ap.key);
+          label.appendChild(document.createTextNode(labelText + (ap.count && ap.count>1 ? ` — ${ap.count}` : '')));
           apList.appendChild(label);
-          inputsByBssid.set(ap.bssid, input);
-          selectedAPs.add(ap.bssid);
+          inputsByBssid.set(ap.key, input);
+          selectedAPs.add(ap.key);
 
           input.addEventListener('change', () => {
-            if (input.checked) selectedAPs.add(ap.bssid); else selectedAPs.delete(ap.bssid);
+            if (input.checked) selectedAPs.add(ap.key); else selectedAPs.delete(ap.key);
             // update allInput checked state
             const allChecked = Array.from(inputsByBssid.values()).every(i => i.checked);
             allInput.checked = allChecked;
@@ -250,7 +283,7 @@
         });
       }
 
-  showAll.addEventListener('change', ()=>{ apSelectWrap.style.display = showAll.checked ? 'none' : 'block'; draw(); });
+  showAll.addEventListener('change', ()=>{ rebuildAPList(); draw(); });
       radiusInput.addEventListener('input', ()=>{ radiusVal.textContent=radiusInput.value; draw(); });
       opacityInput.addEventListener('input', ()=>{ opacityVal.textContent=opacityInput.value; draw(); });
   minRssi.addEventListener('input', ()=>{ minVal.textContent = minRssi.value; draw(); });
