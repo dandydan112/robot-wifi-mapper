@@ -1,8 +1,54 @@
 const Database = require('better-sqlite3');
 const path = require('path');
+const os = require('os');
+const fs = require('fs');
 
-// Database fil gemmes i database mappen
-const dbPath = path.join(__dirname, 'wifi-mapper.db');
+// Compute cross-platform database location with sensible defaults.
+// Priority (highest -> lowest): 
+//   1. DB_PATH env var (full path)
+//   2. DB_DIR env var + DB_FILE (or wifi-mapper.db)
+//   3. USE_SYSTEM_DB_PATH=true -> use OS app data folder
+//   4. DEFAULT: local project database folder (backward compatible)
+const envDbPath = process.env.DB_PATH;
+const envDbDir = process.env.DB_DIR;
+const envDbFile = process.env.DB_FILE || 'wifi-mapper.db';
+const useSystemPath = process.env.USE_SYSTEM_DB_PATH === 'true';
+
+let dbPath;
+
+if (envDbPath) {
+  // Explicit full path provided
+  dbPath = envDbPath;
+} else if (envDbDir) {
+  // Custom directory + filename
+  dbPath = path.join(envDbDir, envDbFile);
+} else if (useSystemPath) {
+  // Use OS-appropriate app data folder (opt-in via env var)
+  const baseDir = process.platform === 'win32' 
+    ? (process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'))
+    : process.platform === 'darwin' 
+    ? path.join(os.homedir(), 'Library', 'Application Support')
+    : path.join(os.homedir(), '.local', 'share');
+
+  const dbFolder = path.join(baseDir, 'wifi-mapper');
+  try {
+    fs.mkdirSync(dbFolder, { recursive: true });
+  } catch (e) {
+    // ignore if cannot create
+  }
+  dbPath = path.join(dbFolder, envDbFile);
+} else {
+  // DEFAULT: Use local project database folder (backward compatible)
+  dbPath = path.join(__dirname, envDbFile);
+}
+
+// Ensure directory exists for dbPath
+try {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+} catch (e) {
+  // ignore - at worst the DB file will be created in current working dir
+}
+
 const db = new Database(dbPath);
 
 // Sikrer at database er optimeret
@@ -169,4 +215,4 @@ const projectDb = {
   }
 };
 
-module.exports = { initDb, projectDb, db };
+module.exports = { initDb, projectDb, db, dbPath };

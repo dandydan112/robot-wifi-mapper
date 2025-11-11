@@ -1,6 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-const { db } = require('./db');
+const { db, dbPath } = require('./db');
+
+// Path to data.json (measurement points stored by dataStore)
+const dataJsonPath = path.join(__dirname, '..', 'data.json');
 
 const dbBackup = {
   // Eksporter database som JSON for backup
@@ -11,6 +14,8 @@ const dbBackup = {
         measurements: db.prepare('SELECT * FROM measurements').all(),
         calibrations: db.prepare('SELECT * FROM calibrations').all(),
         reports: db.prepare('SELECT * FROM reports').all(),
+        // Include measurementPoints (from data.json) so point-scans are preserved in backups
+        measurementPoints: (fs.existsSync(dataJsonPath) ? JSON.parse(fs.readFileSync(dataJsonPath, 'utf8')) : null),
         exportDate: new Date().toISOString()
       };
 
@@ -67,6 +72,16 @@ const dbBackup = {
       }
 
       console.log(`Database importeret fra: ${inputPath}`);
+      // If measurementPoints are present in the JSON, write them to backend/data.json
+      try {
+        if (data.measurementPoints) {
+          fs.writeFileSync(dataJsonPath, JSON.stringify(data.measurementPoints, null, 2), 'utf8');
+          console.log('measurementPoints written to', dataJsonPath);
+        }
+      } catch (e) {
+        console.warn('Could not write measurementPoints to data.json:', e.message || e);
+      }
+
       return true;
     } catch (error) {
       console.error('Fejl ved import:', error);
@@ -77,9 +92,9 @@ const dbBackup = {
   // Kopier database fil direkte
   copyDatabaseFile: (destinationPath) => {
     try {
-      const dbPath = path.join(__dirname, '..', '..', 'wifi-mapper.db');
-      fs.copyFileSync(dbPath, destinationPath);
-      console.log(`Database kopieret til: ${destinationPath}`);
+      const source = dbPath || path.join(__dirname, '..', '..', 'wifi-mapper.db');
+      fs.copyFileSync(source, destinationPath);
+      console.log(`Database kopieret fra ${source} til: ${destinationPath}`);
       return true;
     } catch (error) {
       console.error('Fejl ved kopiering:', error);
@@ -89,11 +104,14 @@ const dbBackup = {
 
   // Hent database info
   getDatabaseInfo: () => {
-    const dbPath = path.join(__dirname, '..', '..', 'wifi-mapper.db');
-    const stats = fs.statSync(dbPath);
-    
+    const source = dbPath || path.join(__dirname, '..', '..', 'wifi-mapper.db');
+    if (!fs.existsSync(source)) {
+      return { path: source, exists: false };
+    }
+    const stats = fs.statSync(source);
+
     return {
-      path: dbPath,
+      path: source,
       size: stats.size,
       created: stats.birthtime,
       modified: stats.mtime,
