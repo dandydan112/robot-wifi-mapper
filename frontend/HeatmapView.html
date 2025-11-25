@@ -53,6 +53,16 @@
           </div>
         </div>
       </div>
+
+      <div style="width:420px;">
+        <div class="card"><div class="card-header"><strong>Målinger</strong></div>
+          <div class="card-content" style="max-height:520px; overflow:auto;">
+            <div id="readingList" style="font-size:14px; line-height:1.4;">
+              Ingen målinger endnu
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -67,6 +77,8 @@
   const apList = document.getElementById('apList');
   const apSelectWrap = document.getElementById('apSelectWrap');
   const selectedAPs = new Set();
+  const readingListEl = document.getElementById('readingList');
+  let highlightedMeasurementId = null;
       const radiusInput = document.getElementById('radius');
   const opacityInput = document.getElementById('opacity');
   const radiusVal = document.getElementById('radiusVal');
@@ -200,6 +212,22 @@
           filtered.forEach(m => { 
             const displayX = (m.x / originalWidth) * displayWidth;
             const displayY = (m.y / originalHeight) * displayHeight;
+            
+            // Draw highlight ring if this measurement is highlighted
+            if (highlightedMeasurementId !== null && m.id === highlightedMeasurementId) {
+              ctx.beginPath();
+              ctx.arc(displayX, displayY, 16, 0, Math.PI*2);
+              ctx.strokeStyle = 'rgba(34, 197, 94, 0.8)';
+              ctx.lineWidth = 3;
+              ctx.stroke();
+              
+              ctx.beginPath();
+              ctx.arc(displayX, displayY, 20, 0, Math.PI*2);
+              ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
+              ctx.lineWidth = 2;
+              ctx.stroke();
+            }
+            
             ctx.beginPath(); 
             ctx.arc(displayX, displayY, 4, 0, Math.PI*2); 
             ctx.fillStyle='white'; 
@@ -208,6 +236,135 @@
             ctx.lineWidth=2; 
             ctx.stroke(); 
           });
+
+          // Update right-side readings list from the same filtered array
+          if (readingListEl) {
+            readingListEl.innerHTML = '';
+            if (!filtered || filtered.length === 0) {
+              readingListEl.textContent = 'Ingen målinger matcher filtrene';
+            } else {
+              filtered.forEach(m => {
+                const sig = (typeof m.signalStrength === 'number') ? m.signalStrength : (m.readings && m.readings[0] && (m.readings[0].rssi || m.readings[0].signal_level)) || null;
+                const ssid = m.ssid || (m.readings && m.readings[0] && m.readings[0].ssid) || '';
+                const bssid = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || '';
+                const freq = (m.frequency || (m.readings && m.readings[0] && m.readings[0].frequency)) || null;
+                const ts = m.timestamp ? (new Date(m.timestamp)).toLocaleString() : (m.createdAt ? (new Date(m.createdAt)).toLocaleString() : '');
+
+                const row = document.createElement('div');
+                row.style.padding = '10px';
+                row.style.borderBottom = '1px solid #f3f4f6';
+                row.style.display = 'flex';
+                row.style.gap = '10px';
+                row.style.alignItems = 'center';
+
+                // Color dot based on signal
+                const dot = document.createElement('div');
+                dot.style.width = '14px';
+                dot.style.height = '14px';
+                dot.style.borderRadius = '50%';
+                dot.style.flex = '0 0 14px';
+                const color = (typeof getColorForSignal === 'function' && sig !== null) ? getColorForSignal(sig) : 'rgba(156,163,175,1)';
+                dot.style.background = color;
+                dot.style.boxShadow = '0 0 4px rgba(0,0,0,0.08)';
+
+                const content = document.createElement('div');
+                content.style.flex = '1 1 auto';
+
+                const title = document.createElement('div');
+                title.style.fontWeight = '700';
+                title.style.marginBottom = '3px';
+                title.textContent = ssid || bssid || ('MP ' + (m.id || '?'));
+
+                const details = document.createElement('div');
+                details.style.fontSize = '12px';
+                details.style.color = '#6b7280';
+                details.style.display = 'flex';
+                details.style.flexWrap = 'wrap';
+                details.style.gap = '8px';
+
+                const idBadge = document.createElement('span');
+                idBadge.textContent = `MP #${m.id || '?'}`;
+                idBadge.style.background = 'rgba(34, 197, 94, 0.15)';
+                idBadge.style.color = 'rgba(21, 128, 61, 1)';
+                idBadge.style.padding = '2px 6px';
+                idBadge.style.borderRadius = '999px';
+                idBadge.style.fontSize = '11px';
+
+                const parentBadge = document.createElement('span');
+                if (m.parentId) {
+                  parentBadge.textContent = `parent #${m.parentId}`;
+                  parentBadge.style.background = '#fff7ed';
+                  parentBadge.style.color = '#92400e';
+                  parentBadge.style.padding = '2px 6px';
+                  parentBadge.style.borderRadius = '999px';
+                  parentBadge.style.fontSize = '11px';
+                }
+
+                const rssiSpan = document.createElement('span');
+                rssiSpan.textContent = `RSSI: ${sig !== null ? sig + ' dBm' : 'N/A'}`;
+
+                const coordSpan = document.createElement('span');
+                coordSpan.textContent = `x:${Math.round(m.x)}, y:${Math.round(m.y)}`;
+
+                const bssidSpan = document.createElement('span');
+                bssidSpan.textContent = bssid ? `${bssid}` : '';
+                bssidSpan.style.opacity = bssid ? '1' : '0.6';
+                bssidSpan.style.fontSize = '12px';
+
+                const freqSpan = document.createElement('span');
+                if (freq) freqSpan.textContent = `${freq} MHz`;
+
+                const tsSpan = document.createElement('span');
+                tsSpan.textContent = ts;
+                tsSpan.style.marginLeft = 'auto';
+                tsSpan.style.fontSize = '11px';
+                tsSpan.style.color = '#9ca3af';
+
+                // Compose details
+                details.appendChild(idBadge);
+                if (m.parentId) details.appendChild(parentBadge);
+                details.appendChild(rssiSpan);
+                details.appendChild(coordSpan);
+                if (freq) details.appendChild(freqSpan);
+                if (bssid) details.appendChild(bssidSpan);
+
+                content.appendChild(title);
+                content.appendChild(details);
+
+                row.appendChild(dot);
+                row.appendChild(content);
+                row.appendChild(tsSpan);
+
+                // Hover and click affordances
+                row.addEventListener('mouseenter', () => { 
+                  row.style.background = '#f8fafc'; 
+                  highlightedMeasurementId = m.id;
+                  draw();
+                });
+                row.addEventListener('mouseleave', () => { 
+                  row.style.background = 'transparent'; 
+                  highlightedMeasurementId = null;
+                  draw();
+                });
+                row.style.cursor = 'pointer';
+                row.addEventListener('click', () => {
+                  // Toggle highlight on click for persistent selection
+                  if (highlightedMeasurementId === m.id) {
+                    highlightedMeasurementId = null;
+                  } else {
+                    highlightedMeasurementId = m.id;
+                  }
+                  draw();
+                  // Post a message so parent app or other iframes can react
+                  if (window.parent && window.parent.postMessage) {
+                    window.parent.postMessage({ type: 'heatmap:selectMeasurement', measurementId: m.id }, '*');
+                  }
+                });
+
+                readingListEl.appendChild(row);
+              });
+            }
+          }
         };
         img.src = floorPlan.imageUrl;
       }
