@@ -26,8 +26,7 @@
       <div style="width:280px;">
         <div class="card" style="margin-bottom:12px;"><div class="card-header"><strong>Filtre</strong></div>
           <div class="card-content">
-            <div class="control"><label><input id="showAll" type="checkbox" checked /> Vis alle AP</label></div>
-            <div class="control" id="apSelectWrap" style="display:none;">
+            <div class="control" id="apSelectWrap">
               <label>Vælg AP</label>
               <div id="apList" style="margin-top:6px; max-height:180px; overflow:auto; border:1px solid #eee; padding:8px; border-radius:4px;"></div>
             </div>
@@ -74,8 +73,7 @@
       let cachedDisplayWidth = null;
       let cachedDisplayHeight = null;
       const canvas = document.getElementById('heatCanvas');
-      const showAll = document.getElementById('showAll');
-  const apList = document.getElementById('apList');
+      const apList = document.getElementById('apList');
   const apSelectWrap = document.getElementById('apSelectWrap');
   const selectedAPs = new Set();
   const readingListEl = document.getElementById('readingList');
@@ -146,7 +144,6 @@
           canvas.height = displayHeight;
           
           ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
-          const show = showAll.checked;
           // RSSI filtering bounds (min <= signal <= max)
           const minFilter = parseFloat(minRssi.value);
           const maxFilter = parseFloat(maxRssi.value);
@@ -159,17 +156,14 @@
           };
 
           // Build base set filtered by selected checkboxes in the UI (read live)
-          let base = measurements;
-          if (!show) {
-            const checkedInputs = Array.from(apList.querySelectorAll('input[type=checkbox][data-key]'))
-              .filter(i => i.checked)
-              .map(i => i.dataset.key);
-            const uiSet = new Set(checkedInputs);
-            base = measurements.filter(m => {
-              const key = getKeyForMeasurement(m);
-              return key && uiSet.has(key);
-            });
-          }
+          const checkedInputs = Array.from(apList.querySelectorAll('input[type=checkbox][data-key]'))
+            .filter(i => i.checked)
+            .map(i => i.dataset.key);
+          const uiSet = new Set(checkedInputs);
+          const base = measurements.filter(m => {
+            const key = getKeyForMeasurement(m);
+            return key && uiSet.has(key);
+          });
 
           const filtered = base.filter(m => {
             const sig = (typeof m.signalStrength === 'number') ? m.signalStrength : (typeof m.rssi === 'number' ? m.rssi : (m.readings && m.readings[0] && (m.readings[0].rssi || m.readings[0].signal_level)) || null);
@@ -249,7 +243,14 @@
                 const ssid = m.ssid || (m.readings && m.readings[0] && m.readings[0].ssid) || '';
                 const bssid = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || '';
                 const freq = (m.frequency || (m.readings && m.readings[0] && m.readings[0].frequency)) || null;
+                const channel = (m.channel || (m.readings && m.readings[0] && m.readings[0].channel)) || null;
                 const ts = m.timestamp ? (new Date(m.timestamp)).toLocaleString() : (m.createdAt ? (new Date(m.createdAt)).toLocaleString() : '');
+                
+                // Debug: log one measurement to see actual data structure
+                if (window.debugMeasurement !== true) {
+                  console.log('Sample measurement data:', m);
+                  window.debugMeasurement = true;
+                }
 
                 const row = document.createElement('div');
                 row.style.padding = '10px';
@@ -313,7 +314,13 @@
                 bssidSpan.style.fontSize = '12px';
 
                 const freqSpan = document.createElement('span');
-                if (freq) freqSpan.textContent = `${freq} MHz`;
+                if (freq) {
+                  const freqGHz = freq >= 5000 ? `${(freq/1000).toFixed(1)} GHz` : `${(freq/1000).toFixed(1)} GHz`;
+                  freqSpan.textContent = freqGHz;
+                }
+
+                const channelSpan = document.createElement('span');
+                if (channel) channelSpan.textContent = `Ch ${channel}`;
 
                 const tsSpan = document.createElement('span');
                 tsSpan.textContent = ts;
@@ -327,6 +334,7 @@
                 details.appendChild(rssiSpan);
                 details.appendChild(coordSpan);
                 if (freq) details.appendChild(freqSpan);
+                if (channel) details.appendChild(channelSpan);
                 if (bssid) details.appendChild(bssidSpan);
 
                 content.appendChild(title);
@@ -376,18 +384,7 @@
         selectedAPs.clear();
         if (!aps || aps.length === 0) {
           apList.textContent = 'Ingen adgangspunkter fundet';
-          apSelectWrap.style.display = 'none';
           return;
-        }
-
-        // Only show the AP checkbox UI when there are many distinct SSIDs
-        // (user requested a checkbox list when ~10 unique SSIDs detected). Use
-        // a threshold so the UI doesn't clutter for small numbers.
-  const SHOW_THRESHOLD = 1;
-        apSelectWrap.style.display = (aps.length >= SHOW_THRESHOLD) ? 'block' : 'none';
-        if (apSelectWrap.style.display === 'none') {
-          // If we're hiding the AP selection UI, ensure "showAll" is checked
-          showAll.checked = true;
         }
 
         // Map to keep input references by BSSID
@@ -441,7 +438,6 @@
         });
       }
 
-  showAll.addEventListener('change', ()=>{ rebuildAPList(); draw(); });
       radiusInput.addEventListener('input', ()=>{ radiusVal.textContent=radiusInput.value; draw(); });
       opacityInput.addEventListener('input', ()=>{ opacityVal.textContent=opacityInput.value; draw(); });
   minRssi.addEventListener('input', ()=>{ minVal.textContent = minRssi.value; draw(); });
