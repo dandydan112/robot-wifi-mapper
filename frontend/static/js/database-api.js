@@ -26,80 +26,120 @@ class DatabaseAPI {
     }
   }
 
-  // Projekter
+  // Floor Plans (tidligere projekter)
   async createProject(name, description) {
-    return this.request('/projects', {
+    // Note: description ignoreres i ny struktur
+    return this.request('/floor-plans', {
       method: 'POST',
-      body: JSON.stringify({ name, description })
+      body: JSON.stringify({ name })
     });
   }
 
   async getAllProjects() {
-    return this.request('/projects');
+    return this.request('/floor-plans');
   }
 
   async getProject(id) {
-    return this.request(`/projects/${id}`);
+    return this.request(`/floor-plans/${id}`);
   }
 
   async updateProject(id, name, description) {
-    return this.request(`/projects/${id}`, {
+    // Note: description ignoreres i ny struktur
+    return this.request(`/floor-plans/${id}`, {
       method: 'PUT',
-      body: JSON.stringify({ name, description })
+      body: JSON.stringify({ name })
     });
   }
 
   async updateProjectStatus(id, status) {
-    return this.request(`/projects/${id}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status })
-    });
+    // Status findes ikke længere i ny struktur - returnerer bare projektet
+    return this.getProject(id);
   }
 
   async deleteProject(id) {
-    return this.request(`/projects/${id}`, {
+    return this.request(`/floor-plans/${id}`, {
       method: 'DELETE'
     });
   }
 
-  // Målinger
-  async addMeasurement(projectId, measurement) {
-    return this.request(`/projects/${projectId}/measurements`, {
+  // Rooms
+  async createRoom(floorPlanId, name) {
+    return this.request(`/floor-plans/${floorPlanId}/rooms`, {
       method: 'POST',
-      body: JSON.stringify(measurement)
+      body: JSON.stringify({ name })
     });
+  }
+
+  async getRooms(floorPlanId) {
+    return this.request(`/floor-plans/${floorPlanId}/rooms`);
+  }
+
+  // Access Points
+  async createAccessPoint(floorPlanId, internetName, location, frequencyBand, macAdress) {
+    return this.request(`/floor-plans/${floorPlanId}/access-points`, {
+      method: 'POST',
+      body: JSON.stringify({ internetName, location, frequencyBand, macAdress })
+    });
+  }
+
+  async getAccessPoints(floorPlanId) {
+    return this.request(`/floor-plans/${floorPlanId}/access-points`);
+  }
+
+  // Measuring Points (tidligere målinger)
+  async addMeasurement(projectId, measurement) {
+    // Denne metode skal nu bruge accessPointId i stedet for projectId
+    // For bagudkompatibilitet returnerer vi tom array
+    console.warn('addMeasurement skal opdateres til at bruge createMeasuringPoint med accessPointId');
+    return { id: 0 };
   }
 
   async getMeasurements(projectId) {
-    return this.request(`/projects/${projectId}/measurements`);
+    // Returnerer tom array for bagudkompatibilitet
+    // Målinger hentes nu via getAccessPoints og derefter getMeasuringPoints
+    return [];
   }
 
-  // Kalibrering
-  async saveCalibration(projectId, floorPlanImage, scaleFactor, referencePoints) {
-    return this.request(`/projects/${projectId}/calibration`, {
+  async createMeasuringPoint(accessPointId, position, signalStrength) {
+    return this.request(`/access-points/${accessPointId}/measuring-points`, {
       method: 'POST',
-      body: JSON.stringify({
-        floorPlanImage,
-        scaleFactor,
-        referencePoints
-      })
+      body: JSON.stringify({ position, signalStrength })
     });
+  }
+
+  async getMeasuringPoints(accessPointId) {
+    return this.request(`/access-points/${accessPointId}/measuring-points`);
+  }
+
+  // Heatmaps
+  async createHeatmap(floorPlanId) {
+    return this.request(`/floor-plans/${floorPlanId}/heatmaps`, {
+      method: 'POST'
+    });
+  }
+
+  async getHeatmaps(floorPlanId) {
+    return this.request(`/floor-plans/${floorPlanId}/heatmaps`);
+  }
+
+  // Kalibrering - fjernet i ny struktur
+  async saveCalibration(projectId, floorPlanImage, scaleFactor, referencePoints) {
+    console.warn('Kalibrering er fjernet i ny database struktur');
+    return { message: 'Kalibrering ikke understøttet' };
   }
 
   async getCalibration(projectId) {
-    return this.request(`/projects/${projectId}/calibration`);
+    return null;
   }
 
-  // Rapporter
+  // Rapporter - fjernet i ny struktur
   async saveReport(projectId, reportType, reportData) {
-    return this.request(`/projects/${projectId}/reports`, {
-      method: 'POST',
-      body: JSON.stringify({ reportType, reportData })
-    });
+    console.warn('Rapporter er fjernet i ny database struktur');
+    return { id: 0 };
   }
 
   async getReports(projectId) {
-    return this.request(`/projects/${projectId}/reports`);
+    return [];
   }
 
   // Database info

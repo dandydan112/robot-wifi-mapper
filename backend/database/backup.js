@@ -10,10 +10,11 @@ const dbBackup = {
   exportToJson: (outputPath) => {
     try {
       const data = {
-        projects: db.prepare('SELECT * FROM projects').all(),
-        measurements: db.prepare('SELECT * FROM measurements').all(),
-        calibrations: db.prepare('SELECT * FROM calibrations').all(),
-        reports: db.prepare('SELECT * FROM reports').all(),
+        floorPlans: db.prepare('SELECT * FROM FLOOR_PLAN').all(),
+        rooms: db.prepare('SELECT * FROM ROOM').all(),
+        accessPoints: db.prepare('SELECT * FROM ACCESS_POINT').all(),
+        measuringPoints: db.prepare('SELECT * FROM MEASURINGPOINT').all(),
+        heatmaps: db.prepare('SELECT * FROM HEATMAP').all(),
         // Include measurementPoints (from data.json) so point-scans are preserved in backups
         measurementPoints: (fs.existsSync(dataJsonPath) ? JSON.parse(fs.readFileSync(dataJsonPath, 'utf8')) : null),
         exportDate: new Date().toISOString()
@@ -33,41 +34,50 @@ const dbBackup = {
     try {
       const data = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
       
-      // Ryd eksisterende data (valgfrit)
-      db.exec('DELETE FROM reports');
-      db.exec('DELETE FROM calibrations');
-      db.exec('DELETE FROM measurements');
-      db.exec('DELETE FROM projects');
+      // Ryd eksisterende data (i korrekt rækkefølge pga. foreign keys)
+      db.exec('DELETE FROM HEATMAP');
+      db.exec('DELETE FROM MEASURINGPOINT');
+      db.exec('DELETE FROM ACCESS_POINT');
+      db.exec('DELETE FROM ROOM');
+      db.exec('DELETE FROM FLOOR_PLAN');
 
-      // Indsæt projekter
-      if (data.projects) {
-        const insertProject = db.prepare('INSERT INTO projects (id, name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)');
-        for (const project of data.projects) {
-          insertProject.run(project.id, project.name, project.description, project.created_at, project.updated_at);
+      // Indsæt FLOOR_PLAN
+      if (data.floorPlans) {
+        const insertFloorPlan = db.prepare('INSERT INTO FLOOR_PLAN (FloorPlanId, Name, CreationDate) VALUES (?, ?, ?)');
+        for (const floorPlan of data.floorPlans) {
+          insertFloorPlan.run(floorPlan.FloorPlanId, floorPlan.Name, floorPlan.CreationDate);
         }
       }
 
-      // Indsæt målinger
-      if (data.measurements) {
-        const insertMeasurement = db.prepare('INSERT INTO measurements (id, project_id, x_coordinate, y_coordinate, signal_strength, ssid, frequency, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-        for (const measurement of data.measurements) {
-          insertMeasurement.run(measurement.id, measurement.project_id, measurement.x_coordinate, measurement.y_coordinate, measurement.signal_strength, measurement.ssid, measurement.frequency, measurement.timestamp);
+      // Indsæt ROOM
+      if (data.rooms) {
+        const insertRoom = db.prepare('INSERT INTO ROOM (RoomId, Name, FloorPlanId) VALUES (?, ?, ?)');
+        for (const room of data.rooms) {
+          insertRoom.run(room.RoomId, room.Name, room.FloorPlanId);
         }
       }
 
-      // Indsæt kalibreringer
-      if (data.calibrations) {
-        const insertCalibration = db.prepare('INSERT INTO calibrations (id, project_id, floor_plan_image, scale_factor, reference_points, created_at) VALUES (?, ?, ?, ?, ?, ?)');
-        for (const calibration of data.calibrations) {
-          insertCalibration.run(calibration.id, calibration.project_id, calibration.floor_plan_image, calibration.scale_factor, calibration.reference_points, calibration.created_at);
+      // Indsæt ACCESS_POINT
+      if (data.accessPoints) {
+        const insertAccessPoint = db.prepare('INSERT INTO ACCESS_POINT (AccessPointId, InternetName, Location, FrequencyBand, MACAdress, FloorPlanId) VALUES (?, ?, ?, ?, ?, ?)');
+        for (const accessPoint of data.accessPoints) {
+          insertAccessPoint.run(accessPoint.AccessPointId, accessPoint.InternetName, accessPoint.Location, accessPoint.FrequencyBand, accessPoint.MACAdress, accessPoint.FloorPlanId);
         }
       }
 
-      // Indsæt rapporter
-      if (data.reports) {
-        const insertReport = db.prepare('INSERT INTO reports (id, project_id, report_type, report_data, generated_at) VALUES (?, ?, ?, ?, ?)');
-        for (const report of data.reports) {
-          insertReport.run(report.id, report.project_id, report.report_type, report.report_data, report.generated_at);
+      // Indsæt MEASURINGPOINT
+      if (data.measuringPoints) {
+        const insertMeasuringPoint = db.prepare('INSERT INTO MEASURINGPOINT (MeasuringpointId, Position, SignalStrength, AccessPointId) VALUES (?, ?, ?, ?)');
+        for (const measuringPoint of data.measuringPoints) {
+          insertMeasuringPoint.run(measuringPoint.MeasuringpointId, measuringPoint.Position, measuringPoint.SignalStrength, measuringPoint.AccessPointId);
+        }
+      }
+
+      // Indsæt HEATMAP
+      if (data.heatmaps) {
+        const insertHeatmap = db.prepare('INSERT INTO HEATMAP (HeatmapId, GenerationDate, FloorPlanId) VALUES (?, ?, ?)');
+        for (const heatmap of data.heatmaps) {
+          insertHeatmap.run(heatmap.HeatmapId, heatmap.GenerationDate, heatmap.FloorPlanId);
         }
       }
 
@@ -115,8 +125,11 @@ const dbBackup = {
       size: stats.size,
       created: stats.birthtime,
       modified: stats.mtime,
-      projectCount: db.prepare('SELECT COUNT(*) as count FROM projects').get().count,
-      measurementCount: db.prepare('SELECT COUNT(*) as count FROM measurements').get().count
+      floorPlanCount: db.prepare('SELECT COUNT(*) as count FROM FLOOR_PLAN').get().count,
+      roomCount: db.prepare('SELECT COUNT(*) as count FROM ROOM').get().count,
+      accessPointCount: db.prepare('SELECT COUNT(*) as count FROM ACCESS_POINT').get().count,
+      measuringPointCount: db.prepare('SELECT COUNT(*) as count FROM MEASURINGPOINT').get().count,
+      heatmapCount: db.prepare('SELECT COUNT(*) as count FROM HEATMAP').get().count
     };
   }
 };

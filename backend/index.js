@@ -88,157 +88,245 @@ app.delete('/api/uploads/:filename', (req, res) => {
   }
 });
 
-// Projekt API endpoints
-app.post('/api/projects', (req, res) => {
+// FLOOR_PLAN API endpoints
+app.post('/api/floor-plans', (req, res) => {
   try {
-    const { name, description } = req.body;
-    const result = projectDb.createProject(name, description);
-    res.status(201).json({ id: result.lastInsertRowid, name, description });
+    const { name } = req.body;
+    const result = projectDb.createFloorPlan(name);
+    res.status(201).json({ id: result.lastInsertRowid, name });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/projects', (req, res) => {
+app.get('/api/floor-plans', (req, res) => {
   try {
-    const projects = projectDb.getAllProjects();
-    res.json(projects);
+    const floorPlans = projectDb.getAllFloorPlans();
+    res.json(floorPlans);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/projects/:id', (req, res) => {
+app.get('/api/floor-plans/:id', (req, res) => {
   try {
-    const project = projectDb.getProject(req.params.id);
-    if (!project) {
-      return res.status(404).json({ error: 'Projekt ikke fundet' });
+    const floorPlan = projectDb.getFloorPlan(req.params.id);
+    if (!floorPlan) {
+      return res.status(404).json({ error: 'FloorPlan ikke fundet' });
     }
-    res.json(project);
+    res.json(floorPlan);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.put('/api/projects/:id', (req, res) => {
+app.put('/api/floor-plans/:id', (req, res) => {
   try {
-    const { name, description } = req.body;
-    const result = projectDb.updateProject(req.params.id, name, description);
+    const { name } = req.body;
+    const result = projectDb.updateFloorPlan(req.params.id, name);
     if (result.changes === 0) {
-      return res.status(404).json({ error: 'Projekt ikke fundet' });
+      return res.status(404).json({ error: 'FloorPlan ikke fundet' });
     }
-    res.json({ id: req.params.id, name, description });
+    res.json({ id: req.params.id, name });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.patch('/api/projects/:id/status', (req, res) => {
+
+
+app.delete('/api/floor-plans/:id', (req, res) => {
   try {
-    const { status } = req.body;
-    const result = projectDb.updateProjectStatus(req.params.id, status);
+    const result = projectDb.deleteFloorPlan(req.params.id);
     if (result.changes === 0) {
-      return res.status(404).json({ error: 'Projekt ikke fundet' });
+      return res.status(404).json({ error: 'FloorPlan ikke fundet' });
     }
-    res.json({ id: req.params.id, status });
+    res.json({ message: 'FloorPlan slettet' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.delete('/api/projects/:id', (req, res) => {
+// Admin endpoint til at rydde alle floor plans
+app.delete('/api/floor-plans', (req, res) => {
   try {
-    const result = projectDb.deleteProject(req.params.id);
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'Projekt ikke fundet' });
-    }
-    res.json({ message: 'Projekt slettet' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Admin endpoint til at rydde alle projekter
-app.delete('/api/projects', (req, res) => {
-  try {
-    const result = db.prepare('DELETE FROM projects').run();
-    // Clean up related data
-    db.prepare('DELETE FROM measurements').run();
-    db.prepare('DELETE FROM calibrations').run();
-    db.prepare('DELETE FROM reports').run();
+    const result = db.prepare('DELETE FROM FLOOR_PLAN').run();
+    // Clean up related data (cascade should handle this, but being explicit)
+    db.prepare('DELETE FROM HEATMAP').run();
+    db.prepare('DELETE FROM MEASURINGPOINT').run();
+    db.prepare('DELETE FROM ACCESS_POINT').run();
+    db.prepare('DELETE FROM ROOM').run();
     
     res.json({ 
-      message: 'Alle projekter slettet', 
-      deletedProjects: result.changes 
+      message: 'Alle floor plans slettet', 
+      deletedFloorPlans: result.changes 
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Målinger API endpoints
-app.post('/api/projects/:id/measurements', (req, res) => {
+// ROOM API endpoints
+app.post('/api/floor-plans/:floorPlanId/rooms', (req, res) => {
   try {
-    const { x, y, signalStrength, ssid, frequency } = req.body;
-    const result = projectDb.addMeasurement(req.params.id, x, y, signalStrength, ssid, frequency);
-    res.status(201).json({ id: result.lastInsertRowid });
+    const { name } = req.body;
+    const result = projectDb.createRoom(name, req.params.floorPlanId);
+    res.status(201).json({ id: result.lastInsertRowid, name, floorPlanId: req.params.floorPlanId });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/projects/:id/measurements', (req, res) => {
+app.get('/api/floor-plans/:floorPlanId/rooms', (req, res) => {
   try {
-    const measurements = projectDb.getMeasurements(req.params.id);
-    res.json(measurements);
+    const rooms = projectDb.getRoomsByFloorPlan(req.params.floorPlanId);
+    res.json(rooms);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Kalibrering API endpoints
-app.post('/api/projects/:id/calibration', (req, res) => {
+app.put('/api/rooms/:id', (req, res) => {
   try {
-    const { floorPlanImage, scaleFactor, referencePoints } = req.body;
-    console.log('Calibration POST received:', {
-      projectId: req.params.id,
-      hasFloorPlanImage: !!floorPlanImage,
-      floorPlanImageType: typeof floorPlanImage,
-      scaleFactor,
-      referencePointsCount: referencePoints?.length
-    });
-    const result = projectDb.saveCalibration(req.params.id, floorPlanImage, scaleFactor, referencePoints);
-    res.status(201).json({ message: 'Kalibrering gemt' });
-  } catch (error) {
-    console.error('Error saving calibration:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/projects/:id/calibration', (req, res) => {
-  try {
-    const calibration = projectDb.getCalibration(req.params.id);
-    res.json(calibration);
+    const { name } = req.body;
+    const result = projectDb.updateRoom(req.params.id, name);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Room ikke fundet' });
+    }
+    res.json({ id: req.params.id, name });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Rapport API endpoints
-app.post('/api/projects/:id/reports', (req, res) => {
+app.delete('/api/rooms/:id', (req, res) => {
   try {
-    const { reportType, reportData } = req.body;
-    const result = projectDb.saveReport(req.params.id, reportType, reportData);
-    res.status(201).json({ id: result.lastInsertRowid });
+    const result = projectDb.deleteRoom(req.params.id);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Room ikke fundet' });
+    }
+    res.json({ message: 'Room slettet' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/projects/:id/reports', (req, res) => {
+// ACCESS_POINT API endpoints
+app.post('/api/floor-plans/:floorPlanId/access-points', (req, res) => {
   try {
-    const reports = projectDb.getReports(req.params.id);
-    res.json(reports);
+    const { internetName, location, frequencyBand, macAdress } = req.body;
+    const result = projectDb.createAccessPoint(internetName, location, frequencyBand, macAdress, req.params.floorPlanId);
+    res.status(201).json({ id: result.lastInsertRowid, internetName, location, frequencyBand, macAdress, floorPlanId: req.params.floorPlanId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/floor-plans/:floorPlanId/access-points', (req, res) => {
+  try {
+    const accessPoints = projectDb.getAccessPointsByFloorPlan(req.params.floorPlanId);
+    res.json(accessPoints);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/access-points/:id', (req, res) => {
+  try {
+    const { internetName, location, frequencyBand, macAdress } = req.body;
+    const result = projectDb.updateAccessPoint(req.params.id, internetName, location, frequencyBand, macAdress);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'AccessPoint ikke fundet' });
+    }
+    res.json({ id: req.params.id, internetName, location, frequencyBand, macAdress });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/access-points/:id', (req, res) => {
+  try {
+    const result = projectDb.deleteAccessPoint(req.params.id);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'AccessPoint ikke fundet' });
+    }
+    res.json({ message: 'AccessPoint slettet' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// MEASURINGPOINT API endpoints
+app.post('/api/access-points/:accessPointId/measuring-points', (req, res) => {
+  try {
+    const { position, signalStrength } = req.body;
+    const result = projectDb.createMeasuringPoint(position, signalStrength, req.params.accessPointId);
+    res.status(201).json({ id: result.lastInsertRowid, position, signalStrength, accessPointId: req.params.accessPointId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/access-points/:accessPointId/measuring-points', (req, res) => {
+  try {
+    const measuringPoints = projectDb.getMeasuringPointsByAccessPoint(req.params.accessPointId);
+    res.json(measuringPoints);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/measuring-points/:id', (req, res) => {
+  try {
+    const { position, signalStrength } = req.body;
+    const result = projectDb.updateMeasuringPoint(req.params.id, position, signalStrength);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'MeasuringPoint ikke fundet' });
+    }
+    res.json({ id: req.params.id, position, signalStrength });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/measuring-points/:id', (req, res) => {
+  try {
+    const result = projectDb.deleteMeasuringPoint(req.params.id);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'MeasuringPoint ikke fundet' });
+    }
+    res.json({ message: 'MeasuringPoint slettet' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// HEATMAP API endpoints
+app.post('/api/floor-plans/:floorPlanId/heatmaps', (req, res) => {
+  try {
+    const result = projectDb.createHeatmap(req.params.floorPlanId);
+    res.status(201).json({ id: result.lastInsertRowid, floorPlanId: req.params.floorPlanId });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/floor-plans/:floorPlanId/heatmaps', (req, res) => {
+  try {
+    const heatmaps = projectDb.getHeatmapsByFloorPlan(req.params.floorPlanId);
+    res.json(heatmaps);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/heatmaps/:id', (req, res) => {
+  try {
+    const result = projectDb.deleteHeatmap(req.params.id);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Heatmap ikke fundet' });
+    }
+    res.json({ message: 'Heatmap slettet' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

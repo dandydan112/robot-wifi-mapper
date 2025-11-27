@@ -54,67 +54,61 @@ const db = new Database(dbPath);
 // Sikrer at database er optimeret
 db.pragma('journal_mode = WAL');
 
+// Aktiver foreign key constraints (påkrævet for CASCADE DELETE)
+db.pragma('foreign_keys = ON');
+
 // Opret tabeller
 const initDb = () => {
-  // Projekter tabel
+  // FLOOR_PLAN tabel
   db.exec(`
-    CREATE TABLE IF NOT EXISTS projects (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      description TEXT,
-      status TEXT DEFAULT 'draft',
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-  
-  // Tilføj status kolonne hvis den ikke findes (migration)
-  try {
-    db.exec(`ALTER TABLE projects ADD COLUMN status TEXT DEFAULT 'draft'`);
-  } catch (e) {
-    // Kolonne findes allerede
-  }
-
-  // WiFi målinger tabel
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS measurements (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      project_id INTEGER NOT NULL,
-      x_coordinate REAL NOT NULL,
-      y_coordinate REAL NOT NULL,
-      signal_strength INTEGER NOT NULL,
-      ssid TEXT,
-      frequency REAL,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    CREATE TABLE IF NOT EXISTS FLOOR_PLAN (
+      FloorPlanId INTEGER PRIMARY KEY AUTOINCREMENT,
+      Name TEXT NOT NULL,
+      CreationDate DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
-  // Kalibrering data tabel
+  // ROOM tabel
   db.exec(`
-    CREATE TABLE IF NOT EXISTS calibrations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      project_id INTEGER NOT NULL,
-      floor_plan_image TEXT, -- Base64 data or file URL
-      floor_plan_file_url TEXT, -- URL til uploadet fil
-      floor_plan_filename TEXT, -- Original filnavn
-      floor_plan_size INTEGER, -- Filstørrelse i bytes
-      scale_factor REAL,
-      reference_points TEXT, -- JSON string
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    CREATE TABLE IF NOT EXISTS ROOM (
+      RoomId INTEGER PRIMARY KEY AUTOINCREMENT,
+      Name TEXT NOT NULL,
+      FloorPlanId INTEGER NOT NULL,
+      FOREIGN KEY (FloorPlanId) REFERENCES FLOOR_PLAN(FloorPlanId) ON DELETE CASCADE
     )
   `);
 
-  // Rapporter tabel
+  // ACCESS_POINT tabel
   db.exec(`
-    CREATE TABLE IF NOT EXISTS reports (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      project_id INTEGER NOT NULL,
-      report_type TEXT NOT NULL,
-      report_data TEXT, -- JSON string
-      generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+    CREATE TABLE IF NOT EXISTS ACCESS_POINT (
+      AccessPointId INTEGER PRIMARY KEY AUTOINCREMENT,
+      InternetName TEXT NOT NULL,
+      Location REAL,
+      FrequencyBand TEXT,
+      MACAdress TEXT,
+      FloorPlanId INTEGER NOT NULL,
+      FOREIGN KEY (FloorPlanId) REFERENCES FLOOR_PLAN(FloorPlanId) ON DELETE CASCADE
+    )
+  `);
+
+  // MEASURINGPOINT tabel
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS MEASURINGPOINT (
+      MeasuringpointId INTEGER PRIMARY KEY AUTOINCREMENT,
+      Position REAL NOT NULL,
+      SignalStrength REAL NOT NULL,
+      AccessPointId INTEGER NOT NULL,
+      FOREIGN KEY (AccessPointId) REFERENCES ACCESS_POINT(AccessPointId) ON DELETE CASCADE
+    )
+  `);
+
+  // HEATMAP tabel
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS HEATMAP (
+      HeatmapId INTEGER PRIMARY KEY AUTOINCREMENT,
+      GenerationDate DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FloorPlanId INTEGER NOT NULL,
+      FOREIGN KEY (FloorPlanId) REFERENCES FLOOR_PLAN(FloorPlanId) ON DELETE CASCADE
     )
   `);
 
@@ -123,95 +117,119 @@ const initDb = () => {
 
 // Database operationer
 const projectDb = {
-  // Projekter
-  createProject: (name, description) => {
-    const stmt = db.prepare('INSERT INTO projects (name, description) VALUES (?, ?)');
-    return stmt.run(name, description);
+  // FLOOR_PLAN operationer
+  createFloorPlan: (name) => {
+    const stmt = db.prepare('INSERT INTO FLOOR_PLAN (Name) VALUES (?)');
+    return stmt.run(name);
   },
 
-  getAllProjects: () => {
-    return db.prepare('SELECT * FROM projects ORDER BY updated_at DESC').all();
+  getAllFloorPlans: () => {
+    return db.prepare('SELECT * FROM FLOOR_PLAN ORDER BY CreationDate DESC').all();
   },
 
-  getProject: (id) => {
-    return db.prepare('SELECT * FROM projects WHERE id = ?').get(id);
+  getFloorPlan: (id) => {
+    return db.prepare('SELECT * FROM FLOOR_PLAN WHERE FloorPlanId = ?').get(id);
   },
 
-  updateProject: (id, name, description) => {
-    const stmt = db.prepare('UPDATE projects SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-    return stmt.run(name, description, id);
+  updateFloorPlan: (id, name) => {
+    const stmt = db.prepare('UPDATE FLOOR_PLAN SET Name = ? WHERE FloorPlanId = ?');
+    return stmt.run(name, id);
   },
 
-  updateProjectStatus: (id, status) => {
-    const stmt = db.prepare('UPDATE projects SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
-    return stmt.run(status, id);
-  },
-
-  deleteProject: (id) => {
-    const stmt = db.prepare('DELETE FROM projects WHERE id = ?');
+  deleteFloorPlan: (id) => {
+    const stmt = db.prepare('DELETE FROM FLOOR_PLAN WHERE FloorPlanId = ?');
     return stmt.run(id);
   },
 
-  // Målinger
-  addMeasurement: (projectId, x, y, signalStrength, ssid, frequency) => {
-    const stmt = db.prepare('INSERT INTO measurements (project_id, x_coordinate, y_coordinate, signal_strength, ssid, frequency) VALUES (?, ?, ?, ?, ?, ?)');
-    return stmt.run(projectId, x, y, signalStrength, ssid, frequency);
+  // ROOM operationer
+  createRoom: (name, floorPlanId) => {
+    const stmt = db.prepare('INSERT INTO ROOM (Name, FloorPlanId) VALUES (?, ?)');
+    return stmt.run(name, floorPlanId);
   },
 
-  getMeasurements: (projectId) => {
-    return db.prepare('SELECT * FROM measurements WHERE project_id = ? ORDER BY timestamp').all(projectId);
+  getRoomsByFloorPlan: (floorPlanId) => {
+    return db.prepare('SELECT * FROM ROOM WHERE FloorPlanId = ?').all(floorPlanId);
   },
 
-  // Kalibrering
-  saveCalibration: (projectId, floorPlanData, scaleFactor, referencePoints) => {
-    // Håndter både base64 data og fil URL
-    const isFileUpload = floorPlanData && typeof floorPlanData === 'object' && floorPlanData.url;
-    
-    if (isFileUpload) {
-      const stmt = db.prepare(`
-        INSERT OR REPLACE INTO calibrations 
-        (project_id, floor_plan_file_url, floor_plan_filename, floor_plan_size, scale_factor, reference_points) 
-        VALUES (?, ?, ?, ?, ?, ?)
-      `);
-      return stmt.run(
-        projectId, 
-        floorPlanData.url, 
-        floorPlanData.originalname, 
-        floorPlanData.size, 
-        scaleFactor, 
-        JSON.stringify(referencePoints)
-      );
-    } else {
-      // Bagudkompatibilitet med base64 data
-      const stmt = db.prepare(`
-        INSERT OR REPLACE INTO calibrations 
-        (project_id, floor_plan_image, scale_factor, reference_points) 
-        VALUES (?, ?, ?, ?)
-      `);
-      return stmt.run(projectId, floorPlanData, scaleFactor, JSON.stringify(referencePoints));
-    }
+  getRoom: (id) => {
+    return db.prepare('SELECT * FROM ROOM WHERE RoomId = ?').get(id);
   },
 
-  getCalibration: (projectId) => {
-    const result = db.prepare('SELECT * FROM calibrations WHERE project_id = ? ORDER BY created_at DESC LIMIT 1').get(projectId);
-    if (result && result.reference_points) {
-      result.reference_points = JSON.parse(result.reference_points);
-    }
-    return result;
+  updateRoom: (id, name) => {
+    const stmt = db.prepare('UPDATE ROOM SET Name = ? WHERE RoomId = ?');
+    return stmt.run(name, id);
   },
 
-  // Rapporter
-  saveReport: (projectId, reportType, reportData) => {
-    const stmt = db.prepare('INSERT INTO reports (project_id, report_type, report_data) VALUES (?, ?, ?)');
-    return stmt.run(projectId, reportType, JSON.stringify(reportData));
+  deleteRoom: (id) => {
+    const stmt = db.prepare('DELETE FROM ROOM WHERE RoomId = ?');
+    return stmt.run(id);
   },
 
-  getReports: (projectId) => {
-    const results = db.prepare('SELECT * FROM reports WHERE project_id = ? ORDER BY generated_at DESC').all(projectId);
-    return results.map(report => ({
-      ...report,
-      report_data: JSON.parse(report.report_data)
-    }));
+  // ACCESS_POINT operationer
+  createAccessPoint: (internetName, location, frequencyBand, macAdress, floorPlanId) => {
+    const stmt = db.prepare('INSERT INTO ACCESS_POINT (InternetName, Location, FrequencyBand, MACAdress, FloorPlanId) VALUES (?, ?, ?, ?, ?)');
+    return stmt.run(internetName, location, frequencyBand, macAdress, floorPlanId);
+  },
+
+  getAccessPointsByFloorPlan: (floorPlanId) => {
+    return db.prepare('SELECT * FROM ACCESS_POINT WHERE FloorPlanId = ?').all(floorPlanId);
+  },
+
+  getAccessPoint: (id) => {
+    return db.prepare('SELECT * FROM ACCESS_POINT WHERE AccessPointId = ?').get(id);
+  },
+
+  updateAccessPoint: (id, internetName, location, frequencyBand, macAdress) => {
+    const stmt = db.prepare('UPDATE ACCESS_POINT SET InternetName = ?, Location = ?, FrequencyBand = ?, MACAdress = ? WHERE AccessPointId = ?');
+    return stmt.run(internetName, location, frequencyBand, macAdress, id);
+  },
+
+  deleteAccessPoint: (id) => {
+    const stmt = db.prepare('DELETE FROM ACCESS_POINT WHERE AccessPointId = ?');
+    return stmt.run(id);
+  },
+
+  // MEASURINGPOINT operationer
+  createMeasuringPoint: (position, signalStrength, accessPointId) => {
+    const stmt = db.prepare('INSERT INTO MEASURINGPOINT (Position, SignalStrength, AccessPointId) VALUES (?, ?, ?)');
+    return stmt.run(position, signalStrength, accessPointId);
+  },
+
+  getMeasuringPointsByAccessPoint: (accessPointId) => {
+    return db.prepare('SELECT * FROM MEASURINGPOINT WHERE AccessPointId = ?').all(accessPointId);
+  },
+
+  getMeasuringPoint: (id) => {
+    return db.prepare('SELECT * FROM MEASURINGPOINT WHERE MeasuringpointId = ?').get(id);
+  },
+
+  updateMeasuringPoint: (id, position, signalStrength) => {
+    const stmt = db.prepare('UPDATE MEASURINGPOINT SET Position = ?, SignalStrength = ? WHERE MeasuringpointId = ?');
+    return stmt.run(position, signalStrength, id);
+  },
+
+  deleteMeasuringPoint: (id) => {
+    const stmt = db.prepare('DELETE FROM MEASURINGPOINT WHERE MeasuringpointId = ?');
+    return stmt.run(id);
+  },
+
+  // HEATMAP operationer
+  createHeatmap: (floorPlanId) => {
+    const stmt = db.prepare('INSERT INTO HEATMAP (FloorPlanId) VALUES (?)');
+    return stmt.run(floorPlanId);
+  },
+
+  getHeatmapsByFloorPlan: (floorPlanId) => {
+    return db.prepare('SELECT * FROM HEATMAP WHERE FloorPlanId = ? ORDER BY GenerationDate DESC').all(floorPlanId);
+  },
+
+  getHeatmap: (id) => {
+    return db.prepare('SELECT * FROM HEATMAP WHERE HeatmapId = ?').get(id);
+  },
+
+  deleteHeatmap: (id) => {
+    const stmt = db.prepare('DELETE FROM HEATMAP WHERE HeatmapId = ?');
+    return stmt.run(id);
   }
 };
 

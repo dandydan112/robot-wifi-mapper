@@ -24,13 +24,21 @@ class WiFiCoverageApp {
     try {
       const basicProjects = await window.dbAPI.getAllProjects();
       
-      // For each project, load complete data
-      this.projects = await Promise.all(basicProjects.map(async (project) => {
-        return await this.loadCompleteProjectData(project);
+      // Map database fields to UI format
+      this.projects = basicProjects.map(fp => ({
+        id: fp.FloorPlanId,
+        name: fp.Name,
+        description: '', // Ikke længere i database
+        status: 'draft', // Ikke længere i database
+        created_at: fp.CreationDate,
+        updated_at: fp.CreationDate,
+        measurements: [],
+        floorPlan: null,
+        reports: []
       }));
       
       this.updateUI();
-      this.sendDataToIframes(); // Send updated projects to dashboard
+      this.sendDataToIframes();
     } catch (err) {
       console.error('Error loading projects from database:', err);
       this.showNotification('Fejl ved indlæsning af projekter fra database. Kontroller at backend kører.', 'error');
@@ -41,80 +49,31 @@ class WiFiCoverageApp {
   // Load complete data for a single project
   async loadCompleteProjectData(basicProject) {
     try {
-      const [rawMeasurements, calibration, reports] = await Promise.all([
-        window.dbAPI.getMeasurements(basicProject.id).catch(() => []),
-        window.dbAPI.getCalibration(basicProject.id).catch(() => null),
-        window.dbAPI.getReports(basicProject.id).catch(() => [])
-      ]);
-
-      // Map database measurement fields to UI format
-      const measurements = (rawMeasurements || []).map(m => ({
-        id: m.id,
-        x: m.x_coordinate,
-        y: m.y_coordinate,
-        signalStrength: m.signal_strength,
-        ssid: m.ssid,
-        frequency: m.frequency,
-        timestamp: m.timestamp
-      }));
-
-      console.log(`Loading project ${basicProject.id}:`, {
-        measurements: measurements?.length || 0,
-        hasCalibration: !!calibration,
-        calibration: calibration
-      });
-
-      // Build floor plan object from calibration data
-      let floorPlan = null;
-      if (calibration && (calibration.floor_plan_image || calibration.floor_plan_file_url)) {
-        const imageData = calibration.floor_plan_image || calibration.floor_plan_file_url;
-        floorPlan = {
-          image: imageData,              // For internal use
-          imageUrl: imageData,           // For upload iframe
-          scaleFactor: calibration.scale_factor || 1,
-          referencePoints: calibration.reference_points || [],
-          fileName: calibration.floor_plan_filename,
-          fileType: calibration.floor_plan_filename?.split('.').pop() || 'unknown',
-          size: calibration.floor_plan_size,
-          isFileUpload: !!calibration.floor_plan_file_url
-        };
-      }
-
-      // Determine project status  
-      // Check if project has a status in database, otherwise infer from data
-      let status = basicProject.status || 'draft';
-      
-      // If no status set yet, infer from data
-      if (!basicProject.status) {
-        if (reports?.length > 0) {
-          status = 'completed'; // Has saved reports
-        } else if (measurements?.length > 0) {
-          status = 'draft'; // Has measurements but no report
-        } else if (floorPlan) {
-          status = 'draft'; // Has floor plan but no measurements
-        }
-      }
-
-      // Return complete project object
-      const completeProject = {
-        ...basicProject,
-        measurements: measurements || [],
-        floorPlan: floorPlan,
-        reports: reports || [],
-        status: status
-      };
-
-      console.log(`Complete project ${basicProject.id}:`, completeProject);
-      return completeProject;
-    } catch (error) {
-      console.error(`Error loading data for project ${basicProject.id}:`, error);
-      // Return basic project if loading fails
+      // I ny struktur hentes data anderledes
+      // For nu returnerer vi bare basis projektet
       return {
-        ...basicProject,
+        id: basicProject.FloorPlanId,
+        name: basicProject.Name,
+        description: '',
+        status: 'draft',
+        created_at: basicProject.CreationDate,
+        updated_at: basicProject.CreationDate,
         measurements: [],
         floorPlan: null,
-        reports: [],
-        status: 'created'
+        reports: []
+      };
+    } catch (err) {
+      console.error(`Error loading complete data for project ${basicProject.FloorPlanId}:`, err);
+      return {
+        id: basicProject.FloorPlanId,
+        name: basicProject.Name,
+        description: '',
+        status: 'draft',
+        created_at: basicProject.CreationDate,
+        updated_at: basicProject.CreationDate,
+        measurements: [],
+        floorPlan: null,
+        reports: []
       };
     }
   }
