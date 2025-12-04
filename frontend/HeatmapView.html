@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Heatmap</title>
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="/static/css/styles.css">
+
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; margin: 0; }
     .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
@@ -15,6 +17,99 @@
     .card-content { padding: 16px; }
     .muted { color:#6b7280; }
     .control { margin-bottom:12px; }
+
+    .rssi-label { 
+      display: block; 
+      height: auto; 
+      margin-bottom: 8px; 
+      font-size: 14px; 
+      white-space: normal; 
+      overflow: visible;
+      line-height: 1.4;
+    }
+    .rssi-label #minVal, .rssi-label #maxVal { 
+      display: inline-block; 
+      min-width: 30px; 
+      text-align: right; 
+      font-weight: 600; 
+    }
+
+.double-range {
+  width: 100%;
+}
+
+.double-range .range {
+  position: relative;
+  height: 36px;
+  display: flex;
+  align-items: center;
+}
+
+.double-range .range .track-bg,
+.double-range .range .range-track {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  border-radius: 999px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.double-range .range .track-bg {
+  background: #e5e7eb; 
+  z-index: 0;
+  border: 0.5px solid #9ca3af;
+  box-sizing: border-box;
+}
+.double-range .range .range-track {
+  left: 8px;
+  right: auto;
+  width: 0;
+  background: #2563eb; 
+  z-index: 1;
+}
+
+.double-range .range input[type="range"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  pointer-events: none;
+  appearance: none;
+  -webkit-appearance: none;
+  z-index: 3;
+}
+.double-range .range input[type="range"].active {
+  z-index: 4;
+}
+
+.double-range .range input[type="range"]::-webkit-slider-runnable-track {
+  background: transparent;
+  border: none;
+}
+.double-range .range input[type="range"]::-moz-range-track {
+  background: transparent;
+  border: none;
+  height: 6px;
+}
+.double-range .range input[type="range"]::-moz-range-progress {
+  background: transparent;
+}
+.double-range .range input[type="range"]::-ms-track {
+  background: transparent;
+  border-color: transparent;
+  color: transparent;
+}
+.double-range .range input[type="range"]::-ms-fill-lower,
+.double-range .range input[type="range"]::-ms-fill-upper {
+  background: transparent;
+  border: none;
+}
+
   </style>  
 </head>
 <body>
@@ -32,12 +127,26 @@
             </div>
             <div class="control"><label>Radius: <span id="radiusVal">80</span>px</label><input id="radius" type="range" min="20" max="200" step="10" value="80" style="width:100%;" /></div>
             <div class="control"><label>Gennemsigtighed: <span id="opacityVal">70</span>%</label><input id="opacity" type="range" min="10" max="100" step="5" value="70" style="width:100%;" /></div>
-            <div class="control"><label>Vis kun signalstyrker mellem <span id="minVal">-90</span> dBm og <span id="maxVal">-30</span> dBm</label>
-              <div style="display:flex; gap:8px; margin-top:8px;">
-                <input id="minRssi" type="range" min="-100" max="0" step="0.5" value="-90" style="flex:1;" />
-                <input id="maxRssi" type="range" min="-100" max="0" step="0.5" value="-30" style="flex:1;" />
-              </div>
-            </div>
+              <div class="control"><label class="rssi-label">Vis kun signalstyrker mellem <span id="minVal">-90</span> dBm og <span id="maxVal">-30</span> dBm</label>
+                 <div class="double-range" style="margin-top:8px;">
+                  <div class="range" id="rangeWrap">
+                    <div class="track-bg"></div>
+                    <div class="range-track" id="rangeTrack"></div>
+                     <input id="minRssi" type="range" min="-100" max="0" step="0.5" value="-90" />
+                     <input id="maxRssi" type="range" min="-100" max="0" step="0.5" value="-30" />
+                   </div>
+                 </div>
+                 <div class="rssi-inputs" style="margin-top:6px; display:flex; gap:8px; align-items:center;">
+                  <label style="font-size:12px;">Min:
+                    <input id="minRssiInput" type="number" step="0.5" min="-100" max="0"
+                            style="width:70px; padding:2px 4px;" />
+                  </label>
+                  <label style="font-size:12px;">Max:
+                    <input id="maxRssiInput" type="number" step="0.5" min="-100" max="0"
+                            style="width:70px; padding:2px 4px;" />
+                  </label>
+                  </div>
+               </div>
           </div>
         </div>
 
@@ -82,10 +191,136 @@
   const opacityInput = document.getElementById('opacity');
   const radiusVal = document.getElementById('radiusVal');
   const opacityVal = document.getElementById('opacityVal');
-  const minRssi = document.getElementById('minRssi');
-  const maxRssi = document.getElementById('maxRssi');
-  const minVal = document.getElementById('minVal');
-  const maxVal = document.getElementById('maxVal');
+const minRssi = document.getElementById('minRssi');
+const maxRssi = document.getElementById('maxRssi');
+const minVal  = document.getElementById('minVal');
+const maxVal  = document.getElementById('maxVal');
+const minRssiInput = document.getElementById('minRssiInput');
+const maxRssiInput = document.getElementById('maxRssiInput');
+const rangeTrackEl = document.getElementById('rangeTrack');
+const rangeWrap    = document.getElementById('rangeWrap');
+
+
+function updateRangeTrack() {
+  if (!rangeTrackEl || !minRssi || !maxRssi || !rangeWrap) return;
+  const min = parseFloat(minRssi.min);
+  const max = parseFloat(minRssi.max);
+  const v1  = parseFloat(minRssi.value);
+  const v2  = parseFloat(maxRssi.value);
+  const rect = rangeWrap.getBoundingClientRect();
+  const width = rect.width || 1;
+  const p1 = (v1 - min) / (max - min);
+  const p2 = (v2 - min) / (max - min);
+  const padding = 8;
+  const trackWidth = width - padding * 2;
+  rangeTrackEl.style.left  = (padding + p1 * trackWidth) + 'px';
+  rangeTrackEl.style.width = Math.max(0, (p2 - p1) * trackWidth) + 'px';
+}
+
+// Make sure min <= max and update labels + blue bar
+function clampRangeInputs() {
+  const step = parseFloat(minRssi.step) || 1;
+  let vMin = parseFloat(minRssi.value);
+  let vMax = parseFloat(maxRssi.value);
+
+  if (vMin >= vMax - step/2) {
+    vMin = Math.max(parseFloat(minRssi.min), vMax - step);
+    minRssi.value = vMin;
+  }
+  if (vMax <= vMin + step/2) {
+    vMax = Math.min(parseFloat(maxRssi.max), vMin + step);
+    maxRssi.value = vMax;
+  }
+
+  minVal.textContent = minRssi.value;
+  maxVal.textContent = maxRssi.value;
+
+    // keep number inputs in sync
+  if (minRssiInput) minRssiInput.value = minRssi.value;
+  if (maxRssiInput) maxRssiInput.value = maxRssi.value;
+
+  updateRangeTrack();
+}
+
+// When user clicks on the bar, choose the closest thumb to move
+rangeWrap.addEventListener('pointerdown', (ev) => {
+  const rect = rangeWrap.getBoundingClientRect();
+  const relX = (ev.clientX - rect.left) / rect.width;
+  const min = parseFloat(minRssi.min);
+  const max = parseFloat(minRssi.max);
+  const valAtPointer = min + relX * (max - min);
+  const dMin = Math.abs(valAtPointer - parseFloat(minRssi.value));
+  const dMax = Math.abs(valAtPointer - parseFloat(maxRssi.value));
+
+  const target = dMin <= dMax ? minRssi : maxRssi;
+  minRssi.classList.remove('active');
+  maxRssi.classList.remove('active');
+  target.classList.add('active');
+});
+
+// Drag behaviour for each thumb
+[minRssi, maxRssi].forEach(inp => {
+  if (!inp) return;
+
+  inp.addEventListener('pointerdown', (ev) => {
+    minRssi.classList.remove('active');
+    maxRssi.classList.remove('active');
+    inp.classList.add('active');
+    if (inp.setPointerCapture) inp.setPointerCapture(ev.pointerId);
+  });
+
+  inp.addEventListener('pointerup', (ev) => {
+    inp.classList.remove('active');
+    if (inp.releasePointerCapture) inp.releasePointerCapture(ev.pointerId);
+  });
+
+  inp.addEventListener('pointercancel', () => inp.classList.remove('active'));
+
+  // Clamp + redraw when values change
+  inp.addEventListener('input', () => {
+    clampRangeInputs();
+    draw();
+  });
+});
+// Sync values when user types in the number fields
+if (minRssiInput && maxRssiInput) {
+  const syncFromTextInputs = () => {
+    let vMin = parseFloat(minRssiInput.value);
+    let vMax = parseFloat(maxRssiInput.value);
+
+    // fallback to current slider values if empty / NaN
+    if (isNaN(vMin)) vMin = parseFloat(minRssi.value);
+    if (isNaN(vMax)) vMax = parseFloat(maxRssi.value);
+
+    // clamp to slider min/max
+    const minBound = parseFloat(minRssi.min);
+    const maxBound = parseFloat(minRssi.max);
+
+    // Force negatives: interpret positive input as negative of that magnitude
+    if (vMin > 0) vMin = -vMin;
+    if (vMax > 0) vMax = -vMax;
+
+    vMin = Math.max(minBound, Math.min(maxBound, vMin));
+    vMax = Math.max(minBound, Math.min(maxBound, vMax));
+
+    minRssi.value = vMin;
+    maxRssi.value = vMax;
+
+    clampRangeInputs();
+    draw();
+  };
+
+  // update on change (blur/Enter); use 'input' instead for live typing
+  minRssiInput.addEventListener('change', syncFromTextInputs);
+  maxRssiInput.addEventListener('change', syncFromTextInputs);
+}
+
+  // Clear active state on global release
+  document.addEventListener('pointerup', () => { minRssi.classList.remove('active'); maxRssi.classList.remove('active'); });
+
+  // Initial setup
+  clampRangeInputs();
+  window.addEventListener('resize', updateRangeTrack);
 
       function getAccessPoints() {
         // Build a deduplicated list of access points keyed by SSID when available,
@@ -440,8 +675,8 @@
 
       radiusInput.addEventListener('input', ()=>{ radiusVal.textContent=radiusInput.value; draw(); });
       opacityInput.addEventListener('input', ()=>{ opacityVal.textContent=opacityInput.value; draw(); });
-  minRssi.addEventListener('input', ()=>{ minVal.textContent = minRssi.value; draw(); });
-  maxRssi.addEventListener('input', ()=>{ maxVal.textContent = maxRssi.value; draw(); });
+  // initialize track
+  clampRangeInputs();
 
       window.addEventListener('message', function(ev){
         try {
@@ -455,6 +690,8 @@
             // Reset cached dimensions when new floor plan is loaded
             cachedDisplayWidth = null;
             cachedDisplayHeight = null;
+            // when floor image or measurements change, keep the dual-range track correct
+            setTimeout(updateRangeTrack,0);
             draw();
           }
         } catch (err) {}
