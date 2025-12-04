@@ -4,6 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Heatmap</title>
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+  <link rel="stylesheet" href="/static/css/styles.css">
+
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; margin: 0; }
     .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
@@ -14,7 +17,100 @@
     .card-content { padding: 16px; }
     .muted { color:#6b7280; }
     .control { margin-bottom:12px; }
-  </style>
+
+    .rssi-label { 
+      display: block; 
+      height: auto; 
+      margin-bottom: 8px; 
+      font-size: 14px; 
+      white-space: normal; 
+      overflow: visible;
+      line-height: 1.4;
+    }
+    .rssi-label #minVal, .rssi-label #maxVal { 
+      display: inline-block; 
+      min-width: 30px; 
+      text-align: right; 
+      font-weight: 600; 
+    }
+
+.double-range {
+  width: 100%;
+}
+
+.double-range .range {
+  position: relative;
+  height: 36px;
+  display: flex;
+  align-items: center;
+}
+
+.double-range .range .track-bg,
+.double-range .range .range-track {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  border-radius: 999px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.double-range .range .track-bg {
+  background: #e5e7eb; 
+  z-index: 0;
+  border: 0.5px solid #9ca3af;
+  box-sizing: border-box;
+}
+.double-range .range .range-track {
+  left: 8px;
+  right: auto;
+  width: 0;
+  background: #2563eb; 
+  z-index: 1;
+}
+
+.double-range .range input[type="range"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  pointer-events: none;
+  appearance: none;
+  -webkit-appearance: none;
+  z-index: 3;
+}
+.double-range .range input[type="range"].active {
+  z-index: 4;
+}
+
+.double-range .range input[type="range"]::-webkit-slider-runnable-track {
+  background: transparent;
+  border: none;
+}
+.double-range .range input[type="range"]::-moz-range-track {
+  background: transparent;
+  border: none;
+  height: 6px;
+}
+.double-range .range input[type="range"]::-moz-range-progress {
+  background: transparent;
+}
+.double-range .range input[type="range"]::-ms-track {
+  background: transparent;
+  border-color: transparent;
+  color: transparent;
+}
+.double-range .range input[type="range"]::-ms-fill-lower,
+.double-range .range input[type="range"]::-ms-fill-upper {
+  background: transparent;
+  border: none;
+}
+
+  </style>  
 </head>
 <body>
   <div class="container">
@@ -25,19 +121,32 @@
       <div style="width:280px;">
         <div class="card" style="margin-bottom:12px;"><div class="card-header"><strong>Filtre</strong></div>
           <div class="card-content">
-            <div class="control"><label><input id="showAll" type="checkbox" checked /> Vis alle AP</label></div>
-            <div class="control" id="apSelectWrap" style="display:none;">
+            <div class="control" id="apSelectWrap">
               <label>Vælg AP</label>
               <div id="apList" style="margin-top:6px; max-height:180px; overflow:auto; border:1px solid #eee; padding:8px; border-radius:4px;"></div>
             </div>
             <div class="control"><label>Radius: <span id="radiusVal">80</span>px</label><input id="radius" type="range" min="20" max="200" step="10" value="80" style="width:100%;" /></div>
             <div class="control"><label>Gennemsigtighed: <span id="opacityVal">70</span>%</label><input id="opacity" type="range" min="10" max="100" step="5" value="70" style="width:100%;" /></div>
-            <div class="control"><label>Vis kun signalstyrker mellem <span id="minVal">-90</span> dBm og <span id="maxVal">-30</span> dBm</label>
-              <div style="display:flex; gap:8px; margin-top:8px;">
-                <input id="minRssi" type="range" min="-100" max="0" step="0.5" value="-90" style="flex:1;" />
-                <input id="maxRssi" type="range" min="-100" max="0" step="0.5" value="-30" style="flex:1;" />
-              </div>
-            </div>
+              <div class="control"><label class="rssi-label">Vis kun signalstyrker mellem <span id="minVal">-90</span> dBm og <span id="maxVal">-30</span> dBm</label>
+                 <div class="double-range" style="margin-top:8px;">
+                  <div class="range" id="rangeWrap">
+                    <div class="track-bg"></div>
+                    <div class="range-track" id="rangeTrack"></div>
+                     <input id="minRssi" type="range" min="-100" max="0" step="0.5" value="-90" />
+                     <input id="maxRssi" type="range" min="-100" max="0" step="0.5" value="-30" />
+                   </div>
+                 </div>
+                 <div class="rssi-inputs" style="margin-top:6px; display:flex; gap:8px; align-items:center;">
+                  <label style="font-size:12px;">Min:
+                    <input id="minRssiInput" type="number" step="0.5" min="-100" max="0"
+                            style="width:70px; padding:2px 4px;" />
+                  </label>
+                  <label style="font-size:12px;">Max:
+                    <input id="maxRssiInput" type="number" step="0.5" min="-100" max="0"
+                            style="width:70px; padding:2px 4px;" />
+                  </label>
+                  </div>
+               </div>
           </div>
         </div>
 
@@ -53,6 +162,16 @@
           </div>
         </div>
       </div>
+
+      <div style="width:420px;">
+        <div class="card"><div class="card-header"><strong>Målinger</strong></div>
+          <div class="card-content" style="max-height:520px; overflow:auto;">
+            <div id="readingList" style="font-size:14px; line-height:1.4;">
+              Ingen målinger endnu
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -63,18 +182,145 @@
       let cachedDisplayWidth = null;
       let cachedDisplayHeight = null;
       const canvas = document.getElementById('heatCanvas');
-      const showAll = document.getElementById('showAll');
-  const apList = document.getElementById('apList');
+      const apList = document.getElementById('apList');
   const apSelectWrap = document.getElementById('apSelectWrap');
   const selectedAPs = new Set();
+  const readingListEl = document.getElementById('readingList');
+  let highlightedMeasurementId = null;
       const radiusInput = document.getElementById('radius');
   const opacityInput = document.getElementById('opacity');
   const radiusVal = document.getElementById('radiusVal');
   const opacityVal = document.getElementById('opacityVal');
-  const minRssi = document.getElementById('minRssi');
-  const maxRssi = document.getElementById('maxRssi');
-  const minVal = document.getElementById('minVal');
-  const maxVal = document.getElementById('maxVal');
+const minRssi = document.getElementById('minRssi');
+const maxRssi = document.getElementById('maxRssi');
+const minVal  = document.getElementById('minVal');
+const maxVal  = document.getElementById('maxVal');
+const minRssiInput = document.getElementById('minRssiInput');
+const maxRssiInput = document.getElementById('maxRssiInput');
+const rangeTrackEl = document.getElementById('rangeTrack');
+const rangeWrap    = document.getElementById('rangeWrap');
+
+
+function updateRangeTrack() {
+  if (!rangeTrackEl || !minRssi || !maxRssi || !rangeWrap) return;
+  const min = parseFloat(minRssi.min);
+  const max = parseFloat(minRssi.max);
+  const v1  = parseFloat(minRssi.value);
+  const v2  = parseFloat(maxRssi.value);
+  const rect = rangeWrap.getBoundingClientRect();
+  const width = rect.width || 1;
+  const p1 = (v1 - min) / (max - min);
+  const p2 = (v2 - min) / (max - min);
+  const padding = 8;
+  const trackWidth = width - padding * 2;
+  rangeTrackEl.style.left  = (padding + p1 * trackWidth) + 'px';
+  rangeTrackEl.style.width = Math.max(0, (p2 - p1) * trackWidth) + 'px';
+}
+
+// Make sure min <= max and update labels + blue bar
+function clampRangeInputs() {
+  const step = parseFloat(minRssi.step) || 1;
+  let vMin = parseFloat(minRssi.value);
+  let vMax = parseFloat(maxRssi.value);
+
+  if (vMin >= vMax - step/2) {
+    vMin = Math.max(parseFloat(minRssi.min), vMax - step);
+    minRssi.value = vMin;
+  }
+  if (vMax <= vMin + step/2) {
+    vMax = Math.min(parseFloat(maxRssi.max), vMin + step);
+    maxRssi.value = vMax;
+  }
+
+  minVal.textContent = minRssi.value;
+  maxVal.textContent = maxRssi.value;
+
+    // keep number inputs in sync
+  if (minRssiInput) minRssiInput.value = minRssi.value;
+  if (maxRssiInput) maxRssiInput.value = maxRssi.value;
+
+  updateRangeTrack();
+}
+
+// When user clicks on the bar, choose the closest thumb to move
+rangeWrap.addEventListener('pointerdown', (ev) => {
+  const rect = rangeWrap.getBoundingClientRect();
+  const relX = (ev.clientX - rect.left) / rect.width;
+  const min = parseFloat(minRssi.min);
+  const max = parseFloat(minRssi.max);
+  const valAtPointer = min + relX * (max - min);
+  const dMin = Math.abs(valAtPointer - parseFloat(minRssi.value));
+  const dMax = Math.abs(valAtPointer - parseFloat(maxRssi.value));
+
+  const target = dMin <= dMax ? minRssi : maxRssi;
+  minRssi.classList.remove('active');
+  maxRssi.classList.remove('active');
+  target.classList.add('active');
+});
+
+// Drag behaviour for each thumb
+[minRssi, maxRssi].forEach(inp => {
+  if (!inp) return;
+
+  inp.addEventListener('pointerdown', (ev) => {
+    minRssi.classList.remove('active');
+    maxRssi.classList.remove('active');
+    inp.classList.add('active');
+    if (inp.setPointerCapture) inp.setPointerCapture(ev.pointerId);
+  });
+
+  inp.addEventListener('pointerup', (ev) => {
+    inp.classList.remove('active');
+    if (inp.releasePointerCapture) inp.releasePointerCapture(ev.pointerId);
+  });
+
+  inp.addEventListener('pointercancel', () => inp.classList.remove('active'));
+
+  // Clamp + redraw when values change
+  inp.addEventListener('input', () => {
+    clampRangeInputs();
+    draw();
+  });
+});
+// Sync values when user types in the number fields
+if (minRssiInput && maxRssiInput) {
+  const syncFromTextInputs = () => {
+    let vMin = parseFloat(minRssiInput.value);
+    let vMax = parseFloat(maxRssiInput.value);
+
+    // fallback to current slider values if empty / NaN
+    if (isNaN(vMin)) vMin = parseFloat(minRssi.value);
+    if (isNaN(vMax)) vMax = parseFloat(maxRssi.value);
+
+    // clamp to slider min/max
+    const minBound = parseFloat(minRssi.min);
+    const maxBound = parseFloat(minRssi.max);
+
+    // Force negatives: interpret positive input as negative of that magnitude
+    if (vMin > 0) vMin = -vMin;
+    if (vMax > 0) vMax = -vMax;
+
+    vMin = Math.max(minBound, Math.min(maxBound, vMin));
+    vMax = Math.max(minBound, Math.min(maxBound, vMax));
+
+    minRssi.value = vMin;
+    maxRssi.value = vMax;
+
+    clampRangeInputs();
+    draw();
+  };
+
+  // update on change (blur/Enter); use 'input' instead for live typing
+  minRssiInput.addEventListener('change', syncFromTextInputs);
+  maxRssiInput.addEventListener('change', syncFromTextInputs);
+}
+
+  // Clear active state on global release
+  document.addEventListener('pointerup', () => { minRssi.classList.remove('active'); maxRssi.classList.remove('active'); });
+
+  // Initial setup
+  clampRangeInputs();
+  window.addEventListener('resize', updateRangeTrack);
 
       function getAccessPoints() {
         // Build a deduplicated list of access points keyed by SSID when available,
@@ -133,7 +379,6 @@
           canvas.height = displayHeight;
           
           ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
-          const show = showAll.checked;
           // RSSI filtering bounds (min <= signal <= max)
           const minFilter = parseFloat(minRssi.value);
           const maxFilter = parseFloat(maxRssi.value);
@@ -146,17 +391,14 @@
           };
 
           // Build base set filtered by selected checkboxes in the UI (read live)
-          let base = measurements;
-          if (!show) {
-            const checkedInputs = Array.from(apList.querySelectorAll('input[type=checkbox][data-key]'))
-              .filter(i => i.checked)
-              .map(i => i.dataset.key);
-            const uiSet = new Set(checkedInputs);
-            base = measurements.filter(m => {
-              const key = getKeyForMeasurement(m);
-              return key && uiSet.has(key);
-            });
-          }
+          const checkedInputs = Array.from(apList.querySelectorAll('input[type=checkbox][data-key]'))
+            .filter(i => i.checked)
+            .map(i => i.dataset.key);
+          const uiSet = new Set(checkedInputs);
+          const base = measurements.filter(m => {
+            const key = getKeyForMeasurement(m);
+            return key && uiSet.has(key);
+          });
 
           const filtered = base.filter(m => {
             const sig = (typeof m.signalStrength === 'number') ? m.signalStrength : (typeof m.rssi === 'number' ? m.rssi : (m.readings && m.readings[0] && (m.readings[0].rssi || m.readings[0].signal_level)) || null);
@@ -200,6 +442,22 @@
           filtered.forEach(m => { 
             const displayX = (m.x / originalWidth) * displayWidth;
             const displayY = (m.y / originalHeight) * displayHeight;
+            
+            // Draw highlight ring if this measurement is highlighted
+            if (highlightedMeasurementId !== null && m.id === highlightedMeasurementId) {
+              ctx.beginPath();
+              ctx.arc(displayX, displayY, 16, 0, Math.PI*2);
+              ctx.strokeStyle = 'rgba(30, 58, 138, 0.9)';
+              ctx.lineWidth = 3;
+              ctx.stroke();
+              
+              ctx.beginPath();
+              ctx.arc(displayX, displayY, 20, 0, Math.PI*2);
+              ctx.strokeStyle = 'rgba(30, 58, 138, 0.45)';
+              ctx.lineWidth = 2;
+              ctx.stroke();
+            }
+            
             ctx.beginPath(); 
             ctx.arc(displayX, displayY, 4, 0, Math.PI*2); 
             ctx.fillStyle='white'; 
@@ -208,6 +466,149 @@
             ctx.lineWidth=2; 
             ctx.stroke(); 
           });
+
+          // Update right-side readings list from the same filtered array
+          if (readingListEl) {
+            readingListEl.innerHTML = '';
+            if (!filtered || filtered.length === 0) {
+              readingListEl.textContent = 'Ingen målinger matcher filtrene';
+            } else {
+              filtered.forEach(m => {
+                const sig = (typeof m.signalStrength === 'number') ? m.signalStrength : (m.readings && m.readings[0] && (m.readings[0].rssi || m.readings[0].signal_level)) || null;
+                const ssid = m.ssid || (m.readings && m.readings[0] && m.readings[0].ssid) || '';
+                const bssid = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || '';
+                const freq = (m.frequency || (m.readings && m.readings[0] && m.readings[0].frequency)) || null;
+                const channel = (m.channel || (m.readings && m.readings[0] && m.readings[0].channel)) || null;
+                const ts = m.timestamp ? (new Date(m.timestamp)).toLocaleString() : (m.createdAt ? (new Date(m.createdAt)).toLocaleString() : '');
+                
+                // Debug: log one measurement to see actual data structure
+                if (window.debugMeasurement !== true) {
+                  console.log('Sample measurement data:', m);
+                  window.debugMeasurement = true;
+                }
+
+                const row = document.createElement('div');
+                row.style.padding = '10px';
+                row.style.borderBottom = '1px solid #f3f4f6';
+                row.style.display = 'flex';
+                row.style.gap = '10px';
+                row.style.alignItems = 'center';
+
+                // Color dot based on signal
+                const dot = document.createElement('div');
+                dot.style.width = '14px';
+                dot.style.height = '14px';
+                dot.style.borderRadius = '50%';
+                dot.style.flex = '0 0 14px';
+                const color = (typeof getColorForSignal === 'function' && sig !== null) ? getColorForSignal(sig) : 'rgba(156,163,175,1)';
+                dot.style.background = color;
+                dot.style.boxShadow = '0 0 4px rgba(0,0,0,0.08)';
+
+                const content = document.createElement('div');
+                content.style.flex = '1 1 auto';
+
+                const title = document.createElement('div');
+                title.style.fontWeight = '700';
+                title.style.marginBottom = '3px';
+                title.textContent = ssid || bssid || ('MP ' + (m.id || '?'));
+
+                const details = document.createElement('div');
+                details.style.fontSize = '12px';
+                details.style.color = '#6b7280';
+                details.style.display = 'flex';
+                details.style.flexWrap = 'wrap';
+                details.style.gap = '8px';
+
+                const idBadge = document.createElement('span');
+                idBadge.textContent = `MP #${m.id || '?'}`;
+                idBadge.style.background = 'rgba(34, 197, 94, 0.15)';
+                idBadge.style.color = 'rgba(21, 128, 61, 1)';
+                idBadge.style.padding = '2px 6px';
+                idBadge.style.borderRadius = '999px';
+                idBadge.style.fontSize = '11px';
+
+                const parentBadge = document.createElement('span');
+                if (m.parentId) {
+                  parentBadge.textContent = `parent #${m.parentId}`;
+                  parentBadge.style.background = '#fff7ed';
+                  parentBadge.style.color = '#92400e';
+                  parentBadge.style.padding = '2px 6px';
+                  parentBadge.style.borderRadius = '999px';
+                  parentBadge.style.fontSize = '11px';
+                }
+
+                const rssiSpan = document.createElement('span');
+                rssiSpan.textContent = `RSSI: ${sig !== null ? sig + ' dBm' : 'N/A'}`;
+
+                const coordSpan = document.createElement('span');
+                coordSpan.textContent = `x:${Math.round(m.x)}, y:${Math.round(m.y)}`;
+
+                const bssidSpan = document.createElement('span');
+                bssidSpan.textContent = bssid ? `${bssid}` : '';
+                bssidSpan.style.opacity = bssid ? '1' : '0.6';
+                bssidSpan.style.fontSize = '12px';
+
+                const freqSpan = document.createElement('span');
+                if (freq) {
+                  const freqGHz = freq >= 5000 ? `${(freq/1000).toFixed(1)} GHz` : `${(freq/1000).toFixed(1)} GHz`;
+                  freqSpan.textContent = freqGHz;
+                }
+
+                const channelSpan = document.createElement('span');
+                if (channel) channelSpan.textContent = `Ch ${channel}`;
+
+                const tsSpan = document.createElement('span');
+                tsSpan.textContent = ts;
+                tsSpan.style.marginLeft = 'auto';
+                tsSpan.style.fontSize = '11px';
+                tsSpan.style.color = '#9ca3af';
+
+                // Compose details
+                details.appendChild(idBadge);
+                if (m.parentId) details.appendChild(parentBadge);
+                details.appendChild(rssiSpan);
+                details.appendChild(coordSpan);
+                if (freq) details.appendChild(freqSpan);
+                if (channel) details.appendChild(channelSpan);
+                if (bssid) details.appendChild(bssidSpan);
+
+                content.appendChild(title);
+                content.appendChild(details);
+
+                row.appendChild(dot);
+                row.appendChild(content);
+                row.appendChild(tsSpan);
+
+                // Hover and click affordances
+                row.addEventListener('mouseenter', () => { 
+                  row.style.background = '#f8fafc'; 
+                  highlightedMeasurementId = m.id;
+                  draw();
+                });
+                row.addEventListener('mouseleave', () => { 
+                  row.style.background = 'transparent'; 
+                  highlightedMeasurementId = null;
+                  draw();
+                });
+                row.style.cursor = 'pointer';
+                row.addEventListener('click', () => {
+                  // Toggle highlight on click for persistent selection
+                  if (highlightedMeasurementId === m.id) {
+                    highlightedMeasurementId = null;
+                  } else {
+                    highlightedMeasurementId = m.id;
+                  }
+                  draw();
+                  // Post a message so parent app or other iframes can react
+                  if (window.parent && window.parent.postMessage) {
+                    window.parent.postMessage({ type: 'heatmap:selectMeasurement', measurementId: m.id }, '*');
+                  }
+                });
+
+                readingListEl.appendChild(row);
+              });
+            }
+          }
         };
         img.src = floorPlan.imageUrl;
       }
@@ -218,18 +619,7 @@
         selectedAPs.clear();
         if (!aps || aps.length === 0) {
           apList.textContent = 'Ingen adgangspunkter fundet';
-          apSelectWrap.style.display = 'none';
           return;
-        }
-
-        // Only show the AP checkbox UI when there are many distinct SSIDs
-        // (user requested a checkbox list when ~10 unique SSIDs detected). Use
-        // a threshold so the UI doesn't clutter for small numbers.
-  const SHOW_THRESHOLD = 1;
-        apSelectWrap.style.display = (aps.length >= SHOW_THRESHOLD) ? 'block' : 'none';
-        if (apSelectWrap.style.display === 'none') {
-          // If we're hiding the AP selection UI, ensure "showAll" is checked
-          showAll.checked = true;
         }
 
         // Map to keep input references by BSSID
@@ -283,11 +673,10 @@
         });
       }
 
-  showAll.addEventListener('change', ()=>{ rebuildAPList(); draw(); });
       radiusInput.addEventListener('input', ()=>{ radiusVal.textContent=radiusInput.value; draw(); });
       opacityInput.addEventListener('input', ()=>{ opacityVal.textContent=opacityInput.value; draw(); });
-  minRssi.addEventListener('input', ()=>{ minVal.textContent = minRssi.value; draw(); });
-  maxRssi.addEventListener('input', ()=>{ maxVal.textContent = maxRssi.value; draw(); });
+  // initialize track
+  clampRangeInputs();
 
       window.addEventListener('message', function(ev){
         try {
@@ -301,6 +690,8 @@
             // Reset cached dimensions when new floor plan is loaded
             cachedDisplayWidth = null;
             cachedDisplayHeight = null;
+            // when floor image or measurements change, keep the dual-range track correct
+            setTimeout(updateRangeTrack,0);
             draw();
           }
         } catch (err) {}

@@ -55,6 +55,7 @@ class WiFiCoverageApp {
         signalStrength: m.signal_strength,
         ssid: m.ssid,
         frequency: m.frequency,
+        channel: m.channel,
         timestamp: m.timestamp
       }));
 
@@ -637,6 +638,8 @@ class WiFiCoverageApp {
                 signalStrength: Array.isArray(c.readings) && c.readings[0] ? (c.readings[0].rssi || c.readings[0].signal_level || null) : null,
                 ssid: (Array.isArray(c.readings) && c.readings[0]) ? (c.readings[0].ssid || '') : '',
                 bssid: (Array.isArray(c.readings) && c.readings[0]) ? (c.readings[0].bssid || c.readings[0].mac || '') : '',
+                frequency: (Array.isArray(c.readings) && c.readings[0]) ? (c.readings[0].frequency || null) : null,
+                channel: (Array.isArray(c.readings) && c.readings[0]) ? (c.readings[0].channel || null) : null,
                 timestamp: c.createdAt
               }));
 

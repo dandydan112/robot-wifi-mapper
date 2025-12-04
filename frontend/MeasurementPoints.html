@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Målepunkter</title>
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; margin: 0; }
     .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
@@ -91,12 +92,14 @@
       let floorPlan = null;
       let measurements = [];
       let selectedPoint = null;
+      let highlightedMeasurementId = null;
       const mapArea = document.getElementById('mapArea');
       const mapPlaceholder = document.getElementById('mapPlaceholder');
       const totalCount = document.getElementById('totalCount');
       const avgSignal = document.getElementById('avgSignal');
       const uniqueSsids = document.getElementById('uniqueSsids');
       const pointsTable = document.querySelector('#pointsTable tbody');
+      const readingListEl = document.getElementById('readingList');
       const modal = document.getElementById('modal');
       const inSignal = document.getElementById('inSignal');
       const inSsid = document.getElementById('inSsid');
@@ -147,6 +150,34 @@
             dot.style.background = (typeof m.signalStrength === 'number' && m.signalStrength >= -60) ? '#22c55e' : ((typeof m.signalStrength === 'number' && m.signalStrength >= -70) ? '#eab308' : '#ef4444');
             dot.title = (m.signalStrength !== null && m.signalStrength !== undefined) ? (m.signalStrength + ' dBm') : '';
             dot.addEventListener('click', function(ev){ ev.stopPropagation(); openModal('edit', m); });
+            
+            // Add highlight ring if this measurement is highlighted
+            if (highlightedMeasurementId !== null && m.id === highlightedMeasurementId) {
+              const ring1 = document.createElement('div');
+              ring1.style.position = 'absolute';
+              ring1.style.left = displayX + 'px';
+              ring1.style.top = displayY + 'px';
+              ring1.style.width = '32px';
+              ring1.style.height = '32px';
+              ring1.style.border = '3px solid rgba(30, 58, 138, 0.9)';
+              ring1.style.borderRadius = '50%';
+              ring1.style.transform = 'translate(-50%, -50%)';
+              ring1.style.pointerEvents = 'none';
+              wrapper.appendChild(ring1);
+              
+              const ring2 = document.createElement('div');
+              ring2.style.position = 'absolute';
+              ring2.style.left = displayX + 'px';
+              ring2.style.top = displayY + 'px';
+              ring2.style.width = '40px';
+              ring2.style.height = '40px';
+              ring2.style.border = '2px solid rgba(30, 58, 138, 0.45)';
+              ring2.style.borderRadius = '50%';
+              ring2.style.transform = 'translate(-50%, -50%)';
+              ring2.style.pointerEvents = 'none';
+              wrapper.appendChild(ring2);
+            }
+            
             wrapper.appendChild(dot);
           });
         };
@@ -168,6 +199,20 @@
         }
         measurements.forEach(m => {
           const tr = document.createElement('tr');
+          tr.style.cursor = 'pointer';
+          
+          // Hover highlighting
+          tr.addEventListener('mouseenter', () => {
+            tr.style.background = '#f8fafc';
+            highlightedMeasurementId = m.id;
+            renderMap();
+          });
+          tr.addEventListener('mouseleave', () => {
+            tr.style.background = 'transparent';
+            highlightedMeasurementId = null;
+            renderMap();
+          });
+          
           const pos = document.createElement('td'); pos.textContent = `(${Math.round(m.x)}, ${Math.round(m.y)})`; tr.appendChild(pos);
           const sig = document.createElement('td'); sig.textContent = m.signalStrength + ' dBm'; tr.appendChild(sig);
           const ssid = document.createElement('td'); ssid.textContent = m.ssid; tr.appendChild(ssid);
@@ -176,6 +221,143 @@
           const delBtn = document.createElement('button'); delBtn.className='btn btn-ghost'; delBtn.textContent='Delete'; delBtn.addEventListener('click', ()=>{ if(confirm('Slet?')) { postDelete(m.id); } });
           actions.appendChild(editBtn); actions.appendChild(delBtn); tr.appendChild(actions);
           pointsTable.appendChild(tr);
+        });
+      }
+
+      function getColorForSignal(strength) {
+        const normalized = Math.max(0, Math.min(1, (strength + 85) / 50));
+        if (normalized < 0.5) {
+          const factor = normalized * 2;
+          return `rgba(255, ${Math.floor(255 * factor)}, 0, 1)`;
+        } else {
+          const factor = (normalized - 0.5) * 2;
+          return `rgba(${Math.floor(255 * (1 - factor))}, 255, 0, 1)`;
+        }
+      }
+
+      function renderReadingsList() {
+        if (!readingListEl) return;
+        readingListEl.innerHTML = '';
+        if (!measurements || measurements.length === 0) {
+          readingListEl.textContent = 'Ingen målinger endnu';
+          return;
+        }
+        
+        measurements.forEach(m => {
+          const sig = (typeof m.signalStrength === 'number') ? m.signalStrength : (m.readings && m.readings[0] && (m.readings[0].rssi || m.readings[0].signal_level)) || null;
+          const ssid = m.ssid || (m.readings && m.readings[0] && m.readings[0].ssid) || '';
+          const bssid = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || '';
+          const freq = (m.frequency || (m.readings && m.readings[0] && m.readings[0].frequency)) || null;
+          const ts = m.timestamp ? (new Date(m.timestamp)).toLocaleString() : (m.createdAt ? (new Date(m.createdAt)).toLocaleString() : '');
+
+          const row = document.createElement('div');
+          row.style.padding = '10px';
+          row.style.borderBottom = '1px solid #f3f4f6';
+          row.style.display = 'flex';
+          row.style.gap = '10px';
+          row.style.alignItems = 'center';
+
+          // Color dot based on signal
+          const dot = document.createElement('div');
+          dot.style.width = '14px';
+          dot.style.height = '14px';
+          dot.style.borderRadius = '50%';
+          dot.style.flex = '0 0 14px';
+          const color = (typeof getColorForSignal === 'function' && sig !== null) ? getColorForSignal(sig) : 'rgba(156,163,175,1)';
+          dot.style.background = color;
+          dot.style.boxShadow = '0 0 4px rgba(0,0,0,0.08)';
+
+          const content = document.createElement('div');
+          content.style.flex = '1 1 auto';
+
+          const title = document.createElement('div');
+          title.style.fontWeight = '700';
+          title.style.marginBottom = '3px';
+          title.textContent = ssid || bssid || ('MP ' + (m.id || '?'));
+
+          const details = document.createElement('div');
+          details.style.fontSize = '12px';
+          details.style.color = '#6b7280';
+          details.style.display = 'flex';
+          details.style.flexWrap = 'wrap';
+          details.style.gap = '8px';
+
+          const idBadge = document.createElement('span');
+          idBadge.textContent = `MP #${m.id || '?'}`;
+          idBadge.style.background = 'rgba(34, 197, 94, 0.15)';
+          idBadge.style.color = 'rgba(21, 128, 61, 1)';
+          idBadge.style.padding = '2px 6px';
+          idBadge.style.borderRadius = '999px';
+          idBadge.style.fontSize = '11px';
+
+          const parentBadge = document.createElement('span');
+          if (m.parentId) {
+            parentBadge.textContent = `parent #${m.parentId}`;
+            parentBadge.style.background = '#fff7ed';
+            parentBadge.style.color = '#92400e';
+            parentBadge.style.padding = '2px 6px';
+            parentBadge.style.borderRadius = '999px';
+            parentBadge.style.fontSize = '11px';
+          }
+
+          const rssiSpan = document.createElement('span');
+          rssiSpan.textContent = `RSSI: ${sig !== null ? sig + ' dBm' : 'N/A'}`;
+
+          const coordSpan = document.createElement('span');
+          coordSpan.textContent = `x:${Math.round(m.x)}, y:${Math.round(m.y)}`;
+
+          const bssidSpan = document.createElement('span');
+          bssidSpan.textContent = bssid ? `${bssid}` : '';
+          bssidSpan.style.opacity = bssid ? '1' : '0.6';
+          bssidSpan.style.fontSize = '12px';
+
+          const freqSpan = document.createElement('span');
+          if (freq) freqSpan.textContent = `${freq} MHz`;
+
+          const tsSpan = document.createElement('span');
+          tsSpan.textContent = ts;
+          tsSpan.style.marginLeft = 'auto';
+          tsSpan.style.fontSize = '11px';
+          tsSpan.style.color = '#9ca3af';
+
+          // Compose details
+          details.appendChild(idBadge);
+          if (m.parentId) details.appendChild(parentBadge);
+          details.appendChild(rssiSpan);
+          details.appendChild(coordSpan);
+          if (freq) details.appendChild(freqSpan);
+          if (bssid) details.appendChild(bssidSpan);
+
+          content.appendChild(title);
+          content.appendChild(details);
+
+          row.appendChild(dot);
+          row.appendChild(content);
+          row.appendChild(tsSpan);
+
+          // Hover and click affordances
+          row.addEventListener('mouseenter', () => { 
+            row.style.background = '#f8fafc'; 
+            highlightedMeasurementId = m.id;
+            renderMap();
+          });
+          row.addEventListener('mouseleave', () => { 
+            row.style.background = 'transparent'; 
+            highlightedMeasurementId = null;
+            renderMap();
+          });
+          row.style.cursor = 'pointer';
+          row.addEventListener('click', () => {
+            // Toggle highlight on click for persistent selection
+            if (highlightedMeasurementId === m.id) {
+              highlightedMeasurementId = null;
+            } else {
+              highlightedMeasurementId = m.id;
+            }
+            renderMap();
+          });
+
+          readingListEl.appendChild(row);
         });
       }
 
@@ -249,7 +431,7 @@
           const msg = ev.data || {};
           if (msg.type === 'measurements:set') {
             measurements = Array.isArray(msg.measurements) ? msg.measurements : [];
-            renderMap(); renderStats(); renderTable();
+            renderMap(); renderStats(); renderTable(); renderReadingsList();
           }
           if (msg.type === 'measurements:setFloorPlan') {
             floorPlan = msg.floorPlan || null;
