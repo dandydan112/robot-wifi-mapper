@@ -19,7 +19,7 @@ Hovedtabellen for etage planer.
 **Relationer:**
 
 - En FLOOR_PLAN kan have mange ROOM (1:\*)
-- En FLOOR_PLAN kan have mange ACCESS_POINT (1:\*)
+- En FLOOR_PLAN kan have mange MEASURINGPOINT (1:\*)
 - En FLOOR_PLAN kan have mange HEATMAP (1:\*)
 
 #### ROOM
@@ -36,38 +36,43 @@ Repræsenterer rum på en etage plan.
 
 - Mange ROOM tilhører én FLOOR_PLAN (\*:1)
 
-#### ACCESS_POINT
-
-Repræsenterer WiFi access points på en etage plan.
-
-**Kolonner:**
-
-- `AccessPointId` (INTEGER, PRIMARY KEY, AUTOINCREMENT) - Unik identifikator for access point
-- `InternetName` (TEXT, NOT NULL) - SSID/Internet navn (f.eks. WiFi netværksnavn)
-- `Location` (REAL) - Placering på etage planen
-- `FrequencyBand` (TEXT) - Frekvensbånd (f.eks. 2.4GHz, 5GHz)
-- `MACAdress` (TEXT) - MAC adresse for access point
-- `FloorPlanId` (INTEGER, NOT NULL, FOREIGN KEY) - Reference til FLOOR_PLAN
-
-**Relationer:**
-
-- Mange ACCESS_POINT tilhører én FLOOR_PLAN (\*:1)
-- En ACCESS_POINT kan have mange MEASURINGPOINT (1:\*)
-
 #### MEASURINGPOINT
 
-Repræsenterer målinger af WiFi signalstyrke.
+Repræsenterer målinger af WiFi signalstyrke på specifikke positioner.
 
 **Kolonner:**
 
 - `MeasuringpointId` (INTEGER, PRIMARY KEY, AUTOINCREMENT) - Unik identifikator for målepunktet
-- `Position` (REAL, NOT NULL) - Position hvor målingen blev taget
-- `SignalStrength` (REAL, NOT NULL) - Målte signalstyrke
-- `AccessPointId` (INTEGER, NOT NULL, FOREIGN KEY) - Reference til ACCESS_POINT
+- `Name` (TEXT) - Navn på målepunktet (valgfrit)
+- `X` (REAL, NOT NULL) - X-koordinat position hvor målingen blev taget
+- `Y` (REAL, NOT NULL) - Y-koordinat position hvor målingen blev taget
+- `CreatedAt` (DATETIME, DEFAULT CURRENT_TIMESTAMP) - Oprettelsesdato
+- `UpdatedAt` (DATETIME, DEFAULT CURRENT_TIMESTAMP) - Sidst opdateret
+- `ScanStatus` (TEXT, DEFAULT 'pending') - Status for WiFi scanning (pending, scanning, done, error)
+- `FloorPlanId` (INTEGER, NOT NULL, FOREIGN KEY) - Reference til FLOOR_PLAN
 
 **Relationer:**
 
-- Mange MEASURINGPOINT tilhører én ACCESS_POINT (\*:1)
+- Mange MEASURINGPOINT tilhører én FLOOR_PLAN (\*:1)
+- En MEASURINGPOINT kan have mange ACCESS_POINT_READING (1:\*)
+
+#### ACCESS_POINT_READING
+
+Repræsenterer individuelle WiFi access point målinger for et målepunkt.
+
+**Kolonner:**
+
+- `AccessPointReadingId` (INTEGER, PRIMARY KEY, AUTOINCREMENT) - Unik identifikator for målingen
+- `Ssid` (TEXT) - WiFi netværksnavn (SSID)
+- `Bssid` (TEXT) - MAC adresse for access point (BSSID)
+- `Rssi` (REAL) - Modtaget signalstyrke indikator (dBm)
+- `Frequency` (REAL) - Frekvens i MHz
+- `Channel` (INTEGER) - WiFi kanal nummer
+- `MeasuringPointId` (INTEGER, NOT NULL, FOREIGN KEY) - Reference til MEASURINGPOINT
+
+**Relationer:**
+
+- Mange ACCESS_POINT_READING tilhører én MEASURINGPOINT (\*:1)
 
 #### HEATMAP
 
@@ -103,21 +108,23 @@ Repræsenterer genererede heatmaps for visualisering.
 - `updateRoom(id, name)` - Opdater rum
 - `deleteRoom(id)` - Slet rum
 
-### ACCESS_POINT Operationer
-
-- `createAccessPoint(internetName, location, frequencyBand, macAdress, floorPlanId)` - Opret nyt access point
-- `getAccessPointsByFloorPlan(floorPlanId)` - Hent alle access points for en etage plan
-- `getAccessPoint(id)` - Hent specifikt access point
-- `updateAccessPoint(id, internetName, location, frequencyBand, macAdress)` - Opdater access point
-- `deleteAccessPoint(id)` - Slet access point
-
 ### MEASURINGPOINT Operationer
 
-- `createMeasuringPoint(position, signalStrength, accessPointId)` - Opret nyt målepunkt
-- `getMeasuringPointsByAccessPoint(accessPointId)` - Hent alle målepunkter for et access point
+- `createMeasuringPoint(name, x, y, floorPlanId, scanStatus)` - Opret nyt målepunkt
+- `getMeasuringPointsByFloorPlan(floorPlanId)` - Hent alle målepunkter for en etage plan
 - `getMeasuringPoint(id)` - Hent specifikt målepunkt
-- `updateMeasuringPoint(id, position, signalStrength)` - Opdater målepunkt
+- `getAllMeasuringPoints()` - Hent alle målepunkter
+- `updateMeasuringPoint(id, name, x, y, scanStatus)` - Opdater målepunkt
+- `updateMeasuringPointStatus(id, scanStatus)` - Opdater kun målepunkt status
 - `deleteMeasuringPoint(id)` - Slet målepunkt
+
+### ACCESS_POINT_READING Operationer
+
+- `createAccessPointReading(ssid, bssid, rssi, frequency, channel, measuringPointId)` - Opret ny WiFi måling
+- `getAccessPointReadingsByMeasuringPoint(measuringPointId)` - Hent alle målinger for et målepunkt
+- `getAccessPointReading(id)` - Hent specifik måling
+- `deleteAccessPointReading(id)` - Slet specifik måling
+- `deleteAccessPointReadingsByMeasuringPoint(measuringPointId)` - Slet alle målinger for et målepunkt
 
 ### HEATMAP Operationer
 
@@ -146,25 +153,34 @@ Repræsenterer genererede heatmaps for visualisering.
 - `PUT /api/rooms/:id` - Opdater rum
 - `DELETE /api/rooms/:id` - Slet rum
 
-### ACCESS_POINT Endpoints
-
-- `POST /api/floor-plans/:floorPlanId/access-points` - Opret nyt access point
-- `GET /api/floor-plans/:floorPlanId/access-points` - Hent alle access points for etage plan
-- `PUT /api/access-points/:id` - Opdater access point
-- `DELETE /api/access-points/:id` - Slet access point
-
 ### MEASURINGPOINT Endpoints
 
-- `POST /api/access-points/:accessPointId/measuring-points` - Opret nyt målepunkt
-- `GET /api/access-points/:accessPointId/measuring-points` - Hent alle målepunkter for access point
-- `PUT /api/measuring-points/:id` - Opdater målepunkt
+- `POST /api/floor-plans/:floorPlanId/measuring-points` - Opret nyt målepunkt
+- `GET /api/floor-plans/:floorPlanId/measuring-points` - Hent alle målepunkter for etage plan
+- `GET /api/measuring-points` - Hent alle målepunkter
+- `GET /api/measuring-points/:id` - Hent specifikt målepunkt
+- `PUT /api/measuring-points/:id` - Opdater målepunkt (name, x, y, scanStatus)
+- `PATCH /api/measuring-points/:id/status` - Opdater kun målepunkt status
 - `DELETE /api/measuring-points/:id` - Slet målepunkt
+
+### ACCESS_POINT_READING Endpoints
+
+- `POST /api/measuring-points/:measuringPointId/readings` - Opret ny WiFi måling
+- `GET /api/measuring-points/:measuringPointId/readings` - Hent alle målinger for målepunkt
+- `GET /api/readings/:id` - Hent specifik måling
+- `DELETE /api/readings/:id` - Slet måling
 
 ### HEATMAP Endpoints
 
 - `POST /api/floor-plans/:floorPlanId/heatmaps` - Opret nyt heatmap
 - `GET /api/floor-plans/:floorPlanId/heatmaps` - Hent alle heatmaps for etage plan
 - `DELETE /api/heatmaps/:id` - Slet heatmap
+
+### Measurement Points Router (fra dataStore.js)
+
+- `POST /api/measurement-points` - Opret målepunkt med WiFi scan
+- `GET /api/measurement-points` - List alle målepunkter (lightweight)
+- `GET /api/measurement-points/:id` - Hent specifikt målepunkt med readings
 
 ### Database Backup Endpoints
 
@@ -181,11 +197,11 @@ Databasen anvender CASCADE DELETE for at sikre referentiel integritet:
 1. Når en FLOOR_PLAN slettes:
 
    - Alle tilknyttede ROOM slettes automatisk
-   - Alle tilknyttede ACCESS_POINT slettes automatisk
+   - Alle tilknyttede MEASURINGPOINT slettes automatisk
    - Alle tilknyttede HEATMAP slettes automatisk
 
-2. Når en ACCESS_POINT slettes:
-   - Alle tilknyttede MEASURINGPOINT slettes automatisk
+2. Når en MEASURINGPOINT slettes:
+   - Alle tilknyttede ACCESS_POINT_READING slettes automatisk
 
 ---
 
@@ -210,10 +226,9 @@ Backups gemmes i JSON format med følgende struktur:
 {
   "floorPlans": [...],
   "rooms": [...],
-  "accessPoints": [...],
   "measuringPoints": [...],
+  "accessPointReadings": [...],
   "heatmaps": [...],
-  "measurementPoints": {...},
   "exportDate": "ISO-8601 timestamp"
 }
 ```
@@ -227,6 +242,8 @@ Backups gemmes i JSON format med følgende struktur:
 - `created` - Oprettelsesdato
 - `modified` - Senest modificeret dato
 - `floorPlanCount` - Antal etage planer
+- `measuringPointCount` - Antal målepunkter
+- `readingCount` - Antal WiFi målinger
 - `roomCount` - Antal rum
 - `accessPointCount` - Antal access points
 - `measuringPointCount` - Antal målepunkter

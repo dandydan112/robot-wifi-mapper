@@ -1,89 +1,121 @@
-const fs = require('fs').promises;
-const path = require('path');
+const { projectDb } = require('../database/db');
 
-const DATA_FILE = path.join(__dirname, '..', 'data.json');
-
-async function loadData() {
-  try {
-    const raw = await fs.readFile(DATA_FILE, 'utf8');
-    return JSON.parse(raw);
-  } catch (err) {
-    return { measurementPoints: {} };
+async function createMeasurementPoint(x, y, name, floorPlanId) {
+  if (!floorPlanId) {
+    const error = new Error('floorPlanId is required');
+    error.code = 'missing_floor_plan_id';
+    throw error;
   }
-}
 
-async function saveData(data) {
-  await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
-}
+  const floorPlan = projectDb.getFloorPlan(floorPlanId);
+  if (!floorPlan) {
+    const error = new Error(`Floor plan ${floorPlanId} not found`);
+    error.code = 'floor_plan_not_found';
+    throw error;
+  }
 
-function generateId() {
-  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
-}
+  const result = projectDb.createMeasuringPoint(name, x, y, floorPlanId, 'pending');
+  
+  const mpId = result.lastInsertRowid;
+  const created = projectDb.getMeasuringPoint(mpId);
 
-async function createMeasurementPoint(x, y, name) {
-  const data = await loadData();
-  const id = generateId();
   const mp = {
-    id,
-    name: name || null,
-    x,
-    y,
-    scan_status: 'pending',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    id: mpId.toString(),
+    name: created?.Name || name || null,
+    x: created?.X ?? x,
+    y: created?.Y ?? y,
+    scan_status: created?.ScanStatus || 'pending',
+    floorPlanId,
+    createdAt: created?.CreatedAt || new Date().toISOString(),
+    updatedAt: created?.UpdatedAt || new Date().toISOString(),
     readings: []
   };
-  data.measurementPoints[id] = mp;
-  await saveData(data);
   return mp;
 }
 
 async function getMeasurementPoint(id) {
-  const data = await loadData();
-  return data.measurementPoints[id];
+  const mp = projectDb.getMeasuringPoint(id);
+  if (!mp) return null;
+  
+  const readings = projectDb.getAccessPointReadingsByMeasuringPoint(id);
+  
+  return {
+    id: mp.MeasuringpointId.toString(),
+    name: mp.Name,
+    x: mp.X,
+    y: mp.Y,
+    scan_status: mp.ScanStatus,
+    floorPlanId: mp.FloorPlanId,
+    createdAt: mp.CreatedAt,
+    updatedAt: mp.UpdatedAt,
+    readings: readings.map(r => ({
+      id: r.AccessPointReadingId,
+      ssid: r.Ssid,
+      bssid: r.Bssid,
+      rssi: r.Rssi,
+      frequency: r.Frequency,
+      channel: r.Channel
+    }))
+  };
 }
 
-async function getAllMeasurementPoints() {
-  const data = await loadData();
-  // Return a lightweight listing but include parentId and a small readings preview
-  return Object.values(data.measurementPoints || {}).map(mp => ({
-    id: mp.id,
-    name: mp.name,
-    x: mp.x,
-    y: mp.y,
-    scan_status: mp.scan_status,
-    parentId: mp.parentId || null,
-      // Keep backward compatibility: include a `readings` array (first reading only)
-      readings: Array.isArray(mp.readings) && mp.readings[0] ? [
-        {
-          ssid: mp.readings[0].ssid || null,
-          bssid: mp.readings[0].bssid || mp.readings[0].mac || null,
-          rssi: mp.readings[0].rssi || mp.readings[0].signal_level || null,
-          frequency: mp.readings[0].frequency || null,
-          channel: mp.readings[0].channel || null
-        }
-      ] : [],
-    createdAt: mp.createdAt,
-    updatedAt: mp.updatedAt
-  }));
+async function getAllMeasurementPoints(filters = {}) {
+  const { floorPlanId } = filters;
+  const mps = floorPlanId
+    ? projectDb.getMeasuringPointsByFloorPlan(floorPlanId)
+    : projectDb.getAllMeasuringPoints();
+  
+  return mps.map(mp => {
+    const readings = projectDb.getAccessPointReadingsByMeasuringPoint(mp.MeasuringpointId);
+    
+    return {
+      id: mp.MeasuringpointId.toString(),
+      name: mp.Name,
+      x: mp.X,
+      y: mp.Y,
+      scan_status: mp.ScanStatus,
+      floorPlanId: mp.FloorPlanId,
+      parentId: null,
+      readings: readings.map(r => ({
+        id: r.AccessPointReadingId,
+        ssid: r.Ssid || null,
+        bssid: r.Bssid || null,
+        rssi: r.Rssi || null,
+        frequency: r.Frequency || null,
+        channel: r.Channel || null
+      })),
+      createdAt: mp.CreatedAt,
+      updatedAt: mp.UpdatedAt
+    };
+  });
 }
 
 async function updateMeasurementPointStatus(id, status, additionalData = {}) {
-  const data = await loadData();
-  const mp = data.measurementPoints[id];
-  if (!mp) return null;
+  const result = projectDb.updateMeasuringPointStatus(id, status);
+  if (result.changes === 0) return null;
   
-  mp.scan_status = status;
-  mp.updatedAt = new Date().toISOString();
-  Object.assign(mp, additionalData);
+  // Handle additional data like readings
+  if (additionalData.readings && Array.isArray(additionalData.readings)) {
+    // Delete old readings and insert new ones
+    projectDb.deleteAccessPointReadingsByMeasuringPoint(id);
+    
+    for (const reading of additionalData.readings) {
+      projectDb.createAccessPointReading(
+        reading.ssid || null,
+        reading.bssid || reading.mac || null,
+        reading.rssi || reading.signal_level || null,
+        reading.frequency || null,
+        reading.channel || null,
+        id
+      );
+    }
+  }
   
-  await saveData(data);
-  return mp;
+  return await getMeasurementPoint(id);
 }
 
 async function createMeasurementPointsFromReadings(originalId, readings) {
-  const data = await loadData();
-  const orig = data.measurementPoints[originalId];
+  const orig = await getMeasurementPoint(originalId);
   if (!orig) return [];
 
   // Deduplicate by BSSID when available, otherwise by SSID
@@ -92,33 +124,51 @@ async function createMeasurementPointsFromReadings(originalId, readings) {
 
   for (let i = 0; i < (readings || []).length; i++) {
     const r = readings[i];
-    const key = r.bssid || r.ssid || `index-${i}`;
+    // Use BSSID if available. If not, use SSID. 
+    // If SSID is '<redacted>' (macOS privacy), treat as unique by appending index to avoid deduplicating them all away.
+    let key = r.bssid || r.ssid || `index-${i}`;
+    if (key === '<redacted>') {
+      key = `redacted-${i}`;
+    }
+
     if (seen.has(key)) continue;
     seen.add(key);
 
-    const id = generateId();
     const nameParts = [];
     if (orig.name) nameParts.push(orig.name);
     if (r.ssid) nameParts.push(r.ssid);
-    const name = nameParts.length ? nameParts.join(' - ') : id;
+    const name = nameParts.length ? nameParts.join(' - ') : `Point-${Date.now()}`;
+
+    // Create measuring point
+    const result = projectDb.createMeasuringPoint(name, orig.x, orig.y, orig.floorPlanId, 'done');
+    const newId = result.lastInsertRowid;
+    
+    // Create access point reading
+    projectDb.createAccessPointReading(
+      r.ssid || null,
+      r.bssid || null,
+      r.rssi || null,
+      r.frequency || null,
+      r.channel || null,
+      newId
+    );
 
     const mp = {
-      id,
+      id: newId.toString(),
       name,
       x: orig.x,
       y: orig.y,
       scan_status: 'done',
+      floorPlanId: orig.floorPlanId,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       readings: [r],
       parentId: originalId
     };
 
-    data.measurementPoints[id] = mp;
     newPoints.push(mp);
   }
 
-  await saveData(data);
   return newPoints;
 }
 

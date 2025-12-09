@@ -2,10 +2,40 @@ const express = require('express');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
+const cors = require('cors');
 const { initDb, projectDb, db } = require('./database/db');
 const dbBackup = require('./database/backup');
 const measurementPointsRouter = require('./routes/measurementPoints');
 const app = express();
+
+function mapFloorPlan(row) {
+  if (!row) return null;
+  let referencePoints = [];
+  if (row.ReferencePoints) {
+    try {
+      referencePoints = JSON.parse(row.ReferencePoints);
+    } catch (err) {
+      referencePoints = [];
+    }
+  }
+
+  return {
+    id: row.FloorPlanId,
+    name: row.Name,
+    building: row.Building || null,
+    description: row.Description || null,
+    createdAt: row.CreationDate,
+    updatedAt: row.UpdatedAt || row.CreationDate,
+    imagePath: row.ImagePath || null,
+    imageUrl: row.ImagePath || null,
+    imageOriginalName: row.ImageOriginalName || null,
+    imageMimeType: row.ImageMimeType || null,
+    imageWidth: row.ImageWidth || null,
+    imageHeight: row.ImageHeight || null,
+    scaleFactor: row.ScaleFactor || null,
+    referencePoints
+  };
+}
 
 // Opret uploads directory hvis den ikke findes
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -37,6 +67,22 @@ const upload = multer({
 // Øg payload grænsen for store billeder og data
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
+
+// Enable CORS for frontend on any localhost port
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    // Allow any localhost port
+    if (origin.match(/^http:\/\/localhost:\d+$/)) {
+      return callback(null, true);
+    }
+    
+    callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+}));
 
 // Servér uploadede filer statisk
 app.use('/uploads', express.static(uploadsDir));
@@ -91,9 +137,16 @@ app.delete('/api/uploads/:filename', (req, res) => {
 // FLOOR_PLAN API endpoints
 app.post('/api/floor-plans', (req, res) => {
   try {
-    const { name } = req.body;
-    const result = projectDb.createFloorPlan(name);
-    res.status(201).json({ id: result.lastInsertRowid, name });
+    const { name, building, description } = req.body || {};
+    if (!name || !String(name).trim()) {
+      return res.status(400).json({ error: 'name is required' });
+    }
+    const trimmedName = String(name).trim();
+    const trimmedBuilding = building !== undefined && building !== null ? String(building).trim() : null;
+    const trimmedDescription = description !== undefined && description !== null ? String(description).trim() : null;
+    const result = projectDb.createFloorPlan(trimmedName, trimmedBuilding, trimmedDescription);
+    const floorPlan = projectDb.getFloorPlan(result.lastInsertRowid);
+    res.status(201).json(mapFloorPlan(floorPlan));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -101,7 +154,7 @@ app.post('/api/floor-plans', (req, res) => {
 
 app.get('/api/floor-plans', (req, res) => {
   try {
-    const floorPlans = projectDb.getAllFloorPlans();
+    const floorPlans = projectDb.getAllFloorPlans().map(mapFloorPlan);
     res.json(floorPlans);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -114,7 +167,7 @@ app.get('/api/floor-plans/:id', (req, res) => {
     if (!floorPlan) {
       return res.status(404).json({ error: 'FloorPlan ikke fundet' });
     }
-    res.json(floorPlan);
+    res.json(mapFloorPlan(floorPlan));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -122,12 +175,56 @@ app.get('/api/floor-plans/:id', (req, res) => {
 
 app.put('/api/floor-plans/:id', (req, res) => {
   try {
-    const { name } = req.body;
-    const result = projectDb.updateFloorPlan(req.params.id, name);
+    const {
+      name,
+      building,
+      description,
+      imagePath,
+      imageOriginalName,
+      imageMimeType,
+      imageWidth,
+      imageHeight,
+      scaleFactor,
+      referencePoints
+    } = req.body || {};
+
+    const updates = {};
+    if (name !== undefined) {
+      if (name !== null) {
+        const trimmedName = String(name).trim();
+        if (!trimmedName) {
+          return res.status(400).json({ error: 'name must not be empty' });
+        }
+        updates.name = trimmedName;
+      }
+    }
+    if (building !== undefined) {
+      updates.building = building === null ? null : String(building).trim();
+    }
+    if (description !== undefined) {
+      updates.description = description === null ? null : String(description).trim();
+    }
+    if (imagePath !== undefined) updates.imagePath = imagePath;
+    if (imageOriginalName !== undefined) updates.imageOriginalName = imageOriginalName;
+    if (imageMimeType !== undefined) updates.imageMimeType = imageMimeType;
+    if (imageWidth !== undefined) updates.imageWidth = imageWidth;
+    if (imageHeight !== undefined) updates.imageHeight = imageHeight;
+    if (scaleFactor !== undefined) updates.scaleFactor = scaleFactor;
+    if (referencePoints !== undefined) {
+      if (referencePoints === null) {
+        updates.referencePoints = null;
+      } else {
+        updates.referencePoints = JSON.stringify(referencePoints);
+      }
+    }
+
+    const result = projectDb.updateFloorPlanDetails(req.params.id, updates);
     if (result.changes === 0) {
       return res.status(404).json({ error: 'FloorPlan ikke fundet' });
     }
-    res.json({ id: req.params.id, name });
+
+    const updated = projectDb.getFloorPlan(req.params.id);
+    res.json(mapFloorPlan(updated));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -154,7 +251,7 @@ app.delete('/api/floor-plans', (req, res) => {
     // Clean up related data (cascade should handle this, but being explicit)
     db.prepare('DELETE FROM HEATMAP').run();
     db.prepare('DELETE FROM MEASURINGPOINT').run();
-    db.prepare('DELETE FROM ACCESS_POINT').run();
+    db.prepare('DELETE FROM ACCESS_POINT_READING').run();
     db.prepare('DELETE FROM ROOM').run();
     
     res.json({ 
@@ -211,66 +308,49 @@ app.delete('/api/rooms/:id', (req, res) => {
   }
 });
 
-// ACCESS_POINT API endpoints
-app.post('/api/floor-plans/:floorPlanId/access-points', (req, res) => {
-  try {
-    const { internetName, location, frequencyBand, macAdress } = req.body;
-    const result = projectDb.createAccessPoint(internetName, location, frequencyBand, macAdress, req.params.floorPlanId);
-    res.status(201).json({ id: result.lastInsertRowid, internetName, location, frequencyBand, macAdress, floorPlanId: req.params.floorPlanId });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.get('/api/floor-plans/:floorPlanId/access-points', (req, res) => {
-  try {
-    const accessPoints = projectDb.getAccessPointsByFloorPlan(req.params.floorPlanId);
-    res.json(accessPoints);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.put('/api/access-points/:id', (req, res) => {
-  try {
-    const { internetName, location, frequencyBand, macAdress } = req.body;
-    const result = projectDb.updateAccessPoint(req.params.id, internetName, location, frequencyBand, macAdress);
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'AccessPoint ikke fundet' });
-    }
-    res.json({ id: req.params.id, internetName, location, frequencyBand, macAdress });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-app.delete('/api/access-points/:id', (req, res) => {
-  try {
-    const result = projectDb.deleteAccessPoint(req.params.id);
-    if (result.changes === 0) {
-      return res.status(404).json({ error: 'AccessPoint ikke fundet' });
-    }
-    res.json({ message: 'AccessPoint slettet' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
 // MEASURINGPOINT API endpoints
-app.post('/api/access-points/:accessPointId/measuring-points', (req, res) => {
+app.post('/api/floor-plans/:floorPlanId/measuring-points', (req, res) => {
   try {
-    const { position, signalStrength } = req.body;
-    const result = projectDb.createMeasuringPoint(position, signalStrength, req.params.accessPointId);
-    res.status(201).json({ id: result.lastInsertRowid, position, signalStrength, accessPointId: req.params.accessPointId });
+    const { name, x, y, scanStatus } = req.body;
+    const result = projectDb.createMeasuringPoint(name, x, y, req.params.floorPlanId, scanStatus);
+    res.status(201).json({ 
+      id: result.lastInsertRowid, 
+      name, 
+      x, 
+      y, 
+      scanStatus: scanStatus || 'pending',
+      floorPlanId: req.params.floorPlanId 
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
 
-app.get('/api/access-points/:accessPointId/measuring-points', (req, res) => {
+app.get('/api/floor-plans/:floorPlanId/measuring-points', (req, res) => {
   try {
-    const measuringPoints = projectDb.getMeasuringPointsByAccessPoint(req.params.accessPointId);
+    const measuringPoints = projectDb.getMeasuringPointsByFloorPlan(req.params.floorPlanId);
     res.json(measuringPoints);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/measuring-points', (req, res) => {
+  try {
+    const measuringPoints = projectDb.getAllMeasuringPoints();
+    res.json(measuringPoints);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/measuring-points/:id', (req, res) => {
+  try {
+    const measuringPoint = projectDb.getMeasuringPoint(req.params.id);
+    if (!measuringPoint) {
+      return res.status(404).json({ error: 'MeasuringPoint ikke fundet' });
+    }
+    res.json(measuringPoint);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -278,12 +358,25 @@ app.get('/api/access-points/:accessPointId/measuring-points', (req, res) => {
 
 app.put('/api/measuring-points/:id', (req, res) => {
   try {
-    const { position, signalStrength } = req.body;
-    const result = projectDb.updateMeasuringPoint(req.params.id, position, signalStrength);
+    const { name, x, y, scanStatus } = req.body;
+    const result = projectDb.updateMeasuringPoint(req.params.id, name, x, y, scanStatus);
     if (result.changes === 0) {
       return res.status(404).json({ error: 'MeasuringPoint ikke fundet' });
     }
-    res.json({ id: req.params.id, position, signalStrength });
+    res.json({ id: req.params.id, name, x, y, scanStatus });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.patch('/api/measuring-points/:id/status', (req, res) => {
+  try {
+    const { scanStatus } = req.body;
+    const result = projectDb.updateMeasuringPointStatus(req.params.id, scanStatus);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'MeasuringPoint ikke fundet' });
+    }
+    res.json({ id: req.params.id, scanStatus });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -296,6 +389,58 @@ app.delete('/api/measuring-points/:id', (req, res) => {
       return res.status(404).json({ error: 'MeasuringPoint ikke fundet' });
     }
     res.json({ message: 'MeasuringPoint slettet' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ACCESS_POINT_READING API endpoints
+app.post('/api/measuring-points/:measuringPointId/readings', (req, res) => {
+  try {
+    const { ssid, bssid, rssi, frequency, channel } = req.body;
+    const result = projectDb.createAccessPointReading(ssid, bssid, rssi, frequency, channel, req.params.measuringPointId);
+    res.status(201).json({ 
+      id: result.lastInsertRowid, 
+      ssid, 
+      bssid, 
+      rssi, 
+      frequency, 
+      channel, 
+      measuringPointId: req.params.measuringPointId 
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/measuring-points/:measuringPointId/readings', (req, res) => {
+  try {
+    const readings = projectDb.getAccessPointReadingsByMeasuringPoint(req.params.measuringPointId);
+    res.json(readings);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/readings/:id', (req, res) => {
+  try {
+    const reading = projectDb.getAccessPointReading(req.params.id);
+    if (!reading) {
+      return res.status(404).json({ error: 'Reading ikke fundet' });
+    }
+    res.json(reading);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/readings/:id', (req, res) => {
+  try {
+    const result = projectDb.deleteAccessPointReading(req.params.id);
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Reading ikke fundet' });
+    }
+    res.json({ message: 'Reading slettet' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -400,6 +545,164 @@ app.post('/api/database/copy', (req, res) => {
 
 // Mount measurement-points router
 app.use('/api/measurement-points', measurementPointsRouter);
+
+// Generate heatmap endpoint
+app.post('/api/heatmap/generate', async (req, res) => {
+  console.log('[Heatmap] POST /api/heatmap/generate called');
+  console.log('[Heatmap] Request body:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    const { floorPlanId, measurements, options } = req.body;
+    
+    console.log('[Heatmap] floorPlanId:', floorPlanId);
+    console.log('[Heatmap] measurements count:', measurements?.length);
+    console.log('[Heatmap] options:', options);
+    
+    if (!floorPlanId || !measurements || measurements.length < 3) {
+      console.log('[Heatmap] Validation failed - need floor plan ID and at least 3 measurements');
+      return res.status(400).json({ 
+        error: 'Need floor plan ID and at least 3 measurements' 
+      });
+    }
+    
+    // Get floor plan from database
+    console.log('[Heatmap] Fetching floor plan from database...');
+    const floorPlan = projectDb.getFloorPlan(floorPlanId);
+    console.log('[Heatmap] Floor plan from DB:', floorPlan);
+    
+    if (!floorPlan) {
+      console.log('[Heatmap] Floor plan not found in database');
+      return res.status(404).json({ error: 'Floor plan not found' });
+    }
+    
+    const floorPlanPath = path.join(__dirname, floorPlan.ImagePath);
+    console.log('[Heatmap] Floor plan path:', floorPlanPath);
+    console.log('[Heatmap] File exists:', fs.existsSync(floorPlanPath));
+    
+    if (!fs.existsSync(floorPlanPath)) {
+      console.log('[Heatmap] Floor plan image file not found at path');
+      return res.status(404).json({ error: 'Floor plan image file not found' });
+    }
+    
+    // Create temp files for measurements and output
+    const tempDir = path.join(__dirname, 'uploads', 'temp');
+    if (!fs.existsSync(tempDir)) {
+      console.log('[Heatmap] Creating temp directory:', tempDir);
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+    
+    const timestamp = Date.now();
+    const measurementsFile = path.join(tempDir, `measurements-${timestamp}.json`);
+    const outputFile = path.join(tempDir, `heatmap-${timestamp}.png`);
+    
+    console.log('[Heatmap] Writing measurements to:', measurementsFile);
+    // Write measurements to temp file
+    fs.writeFileSync(measurementsFile, JSON.stringify(measurements));
+    
+    // Call Python script
+    const { spawn } = require('child_process');
+    const pythonScript = path.join(__dirname, 'services', 'heatmap_generator.py');
+    
+    console.log('[Heatmap] Python script path:', pythonScript);
+    console.log('[Heatmap] Script exists:', fs.existsSync(pythonScript));
+    
+    const args = [
+      pythonScript,
+      '--floorplan', floorPlanPath,
+      '--measurements', measurementsFile,
+      '--output', outputFile,
+      '--metric', options?.metric || 'rssi',
+      '--cmap', options?.colormap || 'RdYlGn'
+    ];
+    
+    if (options?.style) args.push('--style', options.style);
+    if (options?.vmin !== undefined) args.push('--vmin', options.vmin.toString());
+    if (options?.vmax !== undefined) args.push('--vmax', options.vmax.toString());
+    
+    console.log('[Heatmap] Spawning python3 with args:', args);
+    // Use full path to python3 to ensure correct environment
+    const pythonPath = '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3';
+    const python = spawn(pythonPath, args);
+    
+    let stdout = '';
+    let stderr = '';
+    
+    python.stdout.on('data', (data) => {
+      const output = data.toString();
+      stdout += output;
+      console.log('[Heatmap] Python stdout:', output);
+    });
+    
+    python.stderr.on('data', (data) => {
+      const output = data.toString();
+      stderr += output;
+      console.log('[Heatmap] Python stderr:', output);
+    });
+    
+    python.on('close', (code) => {
+      console.log('[Heatmap] Python process exited with code:', code);
+      
+      // Clean up measurements file
+      try {
+        fs.unlinkSync(measurementsFile);
+        console.log('[Heatmap] Cleaned up measurements file');
+      } catch (err) {
+        console.error('[Heatmap] Failed to delete temp measurements file:', err);
+      }
+      
+      if (code !== 0) {
+        console.error('[Heatmap] Python script failed with error:', stderr);
+        return res.status(500).json({ 
+          error: 'Failed to generate heatmap',
+          details: stderr 
+        });
+      }
+      
+      console.log('[Heatmap] Checking for output file:', outputFile);
+      // Read and send the generated image
+      if (fs.existsSync(outputFile)) {
+        console.log('[Heatmap] Output file exists, reading...');
+        const imageBuffer = fs.readFileSync(outputFile);
+        const base64Image = imageBuffer.toString('base64');
+        console.log('[Heatmap] Image converted to base64, length:', base64Image.length);
+        
+        // Save heatmap to database
+        try {
+          const heatmapId = projectDb.createHeatmap({
+            FloorPlanId: floorPlanId,
+            Type: options?.metric || 'rssi',
+            ImagePath: `/uploads/temp/heatmap-${timestamp}.png`,
+            Settings: JSON.stringify(options || {})
+          });
+          
+          console.log('[Heatmap] Saved to database with ID:', heatmapId);
+          
+          res.json({
+            success: true,
+            imageUrl: `/uploads/temp/heatmap-${timestamp}.png`,
+            imageData: `data:image/png;base64,${base64Image}`,
+            heatmapId
+          });
+        } catch (dbErr) {
+          console.error('[Heatmap] Failed to save heatmap to database:', dbErr);
+          // Still send the image even if DB save fails
+          res.json({
+            success: true,
+            imageUrl: `/uploads/temp/heatmap-${timestamp}.png`,
+            imageData: `data:image/png;base64,${base64Image}`
+          });
+        }
+      } else {
+        console.error('[Heatmap] Output file was not created');
+        res.status(500).json({ error: 'Heatmap file not created' });
+      }
+    });
+    
+  } catch (error) {
+    console.error('[Heatmap] Exception in endpoint:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // In production you might serve built frontend from backend/static
 if (process.env.NODE_ENV === 'production') {

@@ -6,16 +6,24 @@ const router = express.Router();
 
 // Create measurement point
 router.post('/', async (req, res) => {
-  const { x, y, name } = req.body || {};
+  const { x, y, name, floorPlanId } = req.body || {};
   
   // Basic validation
   if (typeof x !== 'number' || typeof y !== 'number') {
     return res.status(400).json({ error: 'x and y numeric coordinates are required' });
   }
+  if (floorPlanId === undefined || floorPlanId === null) {
+    return res.status(400).json({ error: 'floorPlanId is required' });
+  }
+
+  const numericFloorPlanId = Number(floorPlanId);
+  if (!Number.isFinite(numericFloorPlanId)) {
+    return res.status(400).json({ error: 'floorPlanId must be a number' });
+  }
 
   try {
-    console.log('[measurementPoints] Creating measurement point', { x, y, name });
-    const mp = await dataStore.createMeasurementPoint(x, y, name);
+    console.log('[measurementPoints] Creating measurement point', { x, y, name, floorPlanId: numericFloorPlanId });
+    const mp = await dataStore.createMeasurementPoint(x, y, name, numericFloorPlanId);
     
     // Respond immediately (keeps latency < 500ms). Start scan in background.
     // Include a short statusMessage for debugging in dev UIs
@@ -31,7 +39,13 @@ router.post('/', async (req, res) => {
     });
   } catch (err) {
     console.error('Error creating measurement point:', err);
-    res.status(500).json({ error: 'Internal server error' });
+    if (err && err.code === 'floor_plan_not_found') {
+      res.status(404).json({ error: 'floor_plan_not_found' });
+    } else if (err && err.code === 'missing_floor_plan_id') {
+      res.status(400).json({ error: 'floorPlanId is required' });
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
   }
 });
 
@@ -55,8 +69,19 @@ router.get('/:id', async (req, res) => {
 // List all measurement points (lightweight)
 router.get('/', async (req, res) => {
   try {
-    console.log('[measurementPoints] GET / - list all');
-    const list = await dataStore.getAllMeasurementPoints();
+    const { floorPlanId } = req.query || {};
+    let fpFilter = {};
+    if (floorPlanId !== undefined) {
+      const fpId = Number(floorPlanId);
+      if (!Number.isFinite(fpId)) {
+        return res.status(400).json({ error: 'floorPlanId must be numeric' });
+      }
+      fpFilter = { floorPlanId: fpId };
+      console.log('[measurementPoints] GET / - list for floorPlanId=%d', fpId);
+    } else {
+      console.log('[measurementPoints] GET / - list all');
+    }
+    const list = await dataStore.getAllMeasurementPoints(fpFilter);
     // Do not change body shape (frontend expects an array). Add a header for debug info.
     res.set('X-Status-Message', `returned ${Array.isArray(list) ? list.length : 0} measurement points`);
     res.json(list);

@@ -30,24 +30,33 @@ async function scanDarwinSystemProfiler() {
     console.log('[wifiScanner] Trying Python CoreWLAN script for real RSSI values...');
     const scriptPath = require('path').join(__dirname, 'scan_wifi_macos.py');
     
-    // Try to find python3 - first check common locations, then fall back to PATH
+    // Try to find python3 - check local venv first, then common locations, then PATH
     let pythonCmd = 'python3';
-    try {
-      const { stdout: whichPython } = await execAsync('which python3', { timeout: 1000 });
-      pythonCmd = whichPython.trim();
-    } catch (e) {
-      // Fallback to common locations if 'which' fails
-      const fs = require('fs');
-      const commonPaths = [
-        '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3',
-        '/usr/local/bin/python3',
-        '/opt/homebrew/bin/python3',
-        '/usr/bin/python3'
-      ];
-      for (const path of commonPaths) {
-        if (fs.existsSync(path)) {
-          pythonCmd = path;
-          break;
+    const fs = require('fs');
+    const path = require('path');
+    
+    // Check for local .venv in project root (assuming backend/services/../../.venv)
+    const venvPython = path.join(__dirname, '..', '..', '.venv', 'bin', 'python3');
+    
+    if (fs.existsSync(venvPython)) {
+      pythonCmd = venvPython;
+    } else {
+      try {
+        const { stdout: whichPython } = await execAsync('which python3', { timeout: 1000 });
+        pythonCmd = whichPython.trim();
+      } catch (e) {
+        // Fallback to common locations if 'which' fails
+        const commonPaths = [
+          '/Library/Frameworks/Python.framework/Versions/3.13/bin/python3',
+          '/usr/local/bin/python3',
+          '/opt/homebrew/bin/python3',
+          '/usr/bin/python3'
+        ];
+        for (const p of commonPaths) {
+          if (fs.existsSync(p)) {
+            pythonCmd = p;
+            break;
+          }
         }
       }
     }
@@ -61,8 +70,25 @@ async function scanDarwinSystemProfiler() {
     
     const data = JSON.parse(stdout);
     
-    // Build a map of channel+security -> RSSI for matching later
+    // If Python found networks with valid SSIDs, use them directly!
+    // This avoids system_profiler's "redacted" issue when Python has proper permissions.
     if (Array.isArray(data) && data.length > 0) {
+      const hasValidSSIDs = data.some(n => n.ssid && n.ssid !== '<redacted>');
+      
+      if (hasValidSSIDs) {
+        console.log(`[wifiScanner] Python CoreWLAN returned ${data.length} networks with valid SSIDs. Using them directly.`);
+        return data.map(n => ({
+          ssid: n.ssid,
+          bssid: n.bssid,
+          signal_level: n.rssi,
+          channel: n.channel,
+          frequency: n.frequency || channelToFrequency(n.channel),
+          security: n.security,
+          raw: n
+        }));
+      }
+
+      // Fallback: Build a map of channel+security -> RSSI for matching later with system_profiler
       data.forEach(network => {
         if (network.rssi && network.channel) {
           // Store multiple keys for matching (channel alone + channel+frequency for better matching)
@@ -72,7 +98,7 @@ async function scanDarwinSystemProfiler() {
           }
         }
       });
-      console.log(`[wifiScanner] Python CoreWLAN found ${data.length} networks with real RSSI`);
+      console.log(`[wifiScanner] Python CoreWLAN found ${data.length} networks (but SSIDs missing/redacted), using for RSSI enrichment only`);
     }
   } catch (err) {
     console.warn('[wifiScanner] Python CoreWLAN failed:', err.message);
@@ -246,6 +272,18 @@ async function performWifiScan(measurementPointId) {
       return sig !== null;
     });
 
+    // Handle redacted SSIDs by assigning a unique placeholder name if BSSID is available
+    networks = networks.map((n, idx) => {
+      if (!n.ssid || n.ssid === '<redacted>') {
+        // If we have a BSSID, use it to make a "unique" name so it doesn't get deduplicated away
+        if (n.bssid) {
+           // Keep ssid as null or redacted, but ensure we don't lose the point.
+           // The frontend now handles <redacted> gracefully.
+        }
+      }
+      return n;
+    });
+
     console.log(`[wifiScanner] Scan completed for ${measurementPointId}: found ${Array.isArray(networks) ? networks.length : 0} networks`);
     
     if (!Array.isArray(networks) || networks.length === 0) {
@@ -271,18 +309,12 @@ async function performWifiScan(measurementPointId) {
       raw: n
     }));
 
-    // Create child measurement points from readings if supported
-    try {
-      if (dataStore && typeof dataStore.createMeasurementPointsFromReadings === 'function') {
-        await dataStore.createMeasurementPointsFromReadings(measurementPointId, readings);
-      } else {
-        console.warn('[wifiScanner] createMeasurementPointsFromReadings not available on dataStore - skipping child creation');
-      }
-    } catch (e) {
-      console.error('Error creating measurement points from readings:', e);
-    }
-
+    // Save all readings directly to the measurement point (new schema approach)
+    // Instead of creating child measurement points, we store readings in ACCESS_POINT_READING table
     await dataStore.updateMeasurementPointStatus(measurementPointId, 'done', { readings });
+    
+    console.log(`[wifiScanner] Saved ${readings.length} readings to measurement point ${measurementPointId}`);
+    
   } catch (err) {
     console.error(`[wifiScanner] Fatal error during scan for ${measurementPointId}:`, err);
     const error = { message: err.message, code: err.code || 'SCAN_ERROR' };

@@ -26,12 +26,15 @@ class DatabaseAPI {
     }
   }
 
-  // Floor Plans (tidligere projekter)
-  async createProject(name, description) {
-    // Note: description ignoreres i ny struktur
+  async createProject(project) {
+    const payload = {
+      name: project?.name,
+      building: project?.building || null,
+      description: project?.description || null
+    };
     return this.request('/floor-plans', {
       method: 'POST',
-      body: JSON.stringify({ name })
+      body: JSON.stringify(payload)
     });
   }
 
@@ -43,17 +46,11 @@ class DatabaseAPI {
     return this.request(`/floor-plans/${id}`);
   }
 
-  async updateProject(id, name, description) {
-    // Note: description ignoreres i ny struktur
+  async updateProject(id, updates) {
     return this.request(`/floor-plans/${id}`, {
       method: 'PUT',
-      body: JSON.stringify({ name })
+      body: JSON.stringify(updates)
     });
-  }
-
-  async updateProjectStatus(id, status) {
-    // Status findes ikke længere i ny struktur - returnerer bare projektet
-    return this.getProject(id);
   }
 
   async deleteProject(id) {
@@ -62,87 +59,28 @@ class DatabaseAPI {
     });
   }
 
-  // Rooms
-  async createRoom(floorPlanId, name) {
-    return this.request(`/floor-plans/${floorPlanId}/rooms`, {
-      method: 'POST',
-      body: JSON.stringify({ name })
+  async getMeasurementPoints(floorPlanId) {
+    const endpoint = floorPlanId !== undefined && floorPlanId !== null
+      ? `/measurement-points?floorPlanId=${encodeURIComponent(floorPlanId)}`
+      : '/measurement-points';
+    return this.request(endpoint);
+  }
+
+  async updateFloorPlanDetails(floorPlanId, details) {
+    return this.request(`/floor-plans/${floorPlanId}`, {
+      method: 'PUT',
+      body: JSON.stringify(details)
     });
   }
 
-  async getRooms(floorPlanId) {
-    return this.request(`/floor-plans/${floorPlanId}/rooms`);
-  }
-
-  // Access Points
-  async createAccessPoint(floorPlanId, internetName, location, frequencyBand, macAdress) {
-    return this.request(`/floor-plans/${floorPlanId}/access-points`, {
-      method: 'POST',
-      body: JSON.stringify({ internetName, location, frequencyBand, macAdress })
+  async saveCalibration(floorPlanId, imagePath, scaleFactor, referencePoints) {
+    return this.updateFloorPlanDetails(floorPlanId, {
+      imagePath,
+      scaleFactor,
+      referencePoints
     });
   }
 
-  async getAccessPoints(floorPlanId) {
-    return this.request(`/floor-plans/${floorPlanId}/access-points`);
-  }
-
-  // Measuring Points (tidligere målinger)
-  async addMeasurement(projectId, measurement) {
-    // Denne metode skal nu bruge accessPointId i stedet for projectId
-    // For bagudkompatibilitet returnerer vi tom array
-    console.warn('addMeasurement skal opdateres til at bruge createMeasuringPoint med accessPointId');
-    return { id: 0 };
-  }
-
-  async getMeasurements(projectId) {
-    // Returnerer tom array for bagudkompatibilitet
-    // Målinger hentes nu via getAccessPoints og derefter getMeasuringPoints
-    return [];
-  }
-
-  async createMeasuringPoint(accessPointId, position, signalStrength) {
-    return this.request(`/access-points/${accessPointId}/measuring-points`, {
-      method: 'POST',
-      body: JSON.stringify({ position, signalStrength })
-    });
-  }
-
-  async getMeasuringPoints(accessPointId) {
-    return this.request(`/access-points/${accessPointId}/measuring-points`);
-  }
-
-  // Heatmaps
-  async createHeatmap(floorPlanId) {
-    return this.request(`/floor-plans/${floorPlanId}/heatmaps`, {
-      method: 'POST'
-    });
-  }
-
-  async getHeatmaps(floorPlanId) {
-    return this.request(`/floor-plans/${floorPlanId}/heatmaps`);
-  }
-
-  // Kalibrering - fjernet i ny struktur
-  async saveCalibration(projectId, floorPlanImage, scaleFactor, referencePoints) {
-    console.warn('Kalibrering er fjernet i ny database struktur');
-    return { message: 'Kalibrering ikke understøttet' };
-  }
-
-  async getCalibration(projectId) {
-    return null;
-  }
-
-  // Rapporter - fjernet i ny struktur
-  async saveReport(projectId, reportType, reportData) {
-    console.warn('Rapporter er fjernet i ny database struktur');
-    return { id: 0 };
-  }
-
-  async getReports(projectId) {
-    return [];
-  }
-
-  // Database info
   async getDatabaseInfo() {
     return this.request('/database/info');
   }
@@ -160,5 +98,4 @@ class DatabaseAPI {
   }
 }
 
-// Global database instance
 window.dbAPI = new DatabaseAPI();

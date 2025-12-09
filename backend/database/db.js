@@ -57,6 +57,16 @@ db.pragma('journal_mode = WAL');
 // Aktiver foreign key constraints (påkrævet for CASCADE DELETE)
 db.pragma('foreign_keys = ON');
 
+// Helper to ensure optional columns exist on a table (idempotent)
+function ensureColumn(tableName, columnName, columnDefinition) {
+  const infoStmt = db.prepare(`PRAGMA table_info(${tableName})`);
+  const columns = infoStmt.all();
+  const exists = columns.some(col => col.name === columnName);
+  if (!exists) {
+    db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${columnDefinition}`);
+  }
+}
+
 // Opret tabeller
 const initDb = () => {
   // FLOOR_PLAN tabel
@@ -64,7 +74,17 @@ const initDb = () => {
     CREATE TABLE IF NOT EXISTS FLOOR_PLAN (
       FloorPlanId INTEGER PRIMARY KEY AUTOINCREMENT,
       Name TEXT NOT NULL,
-      CreationDate DATETIME DEFAULT CURRENT_TIMESTAMP
+      Building TEXT,
+      Description TEXT,
+      CreationDate DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      ImagePath TEXT,
+      ImageOriginalName TEXT,
+      ImageMimeType TEXT,
+      ImageWidth REAL,
+      ImageHeight REAL,
+      ScaleFactor REAL,
+      ReferencePoints TEXT
     )
   `);
 
@@ -78,27 +98,32 @@ const initDb = () => {
     )
   `);
 
-  // ACCESS_POINT tabel
+  // MEASURINGPOINT tabel
   db.exec(`
-    CREATE TABLE IF NOT EXISTS ACCESS_POINT (
-      AccessPointId INTEGER PRIMARY KEY AUTOINCREMENT,
-      InternetName TEXT NOT NULL,
-      Location REAL,
-      FrequencyBand TEXT,
-      MACAdress TEXT,
+    CREATE TABLE IF NOT EXISTS MEASURINGPOINT (
+      MeasuringpointId INTEGER PRIMARY KEY AUTOINCREMENT,
+      Name TEXT,
+      X REAL NOT NULL,
+      Y REAL NOT NULL,
+      CreatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UpdatedAt DATETIME DEFAULT CURRENT_TIMESTAMP,
+      ScanStatus TEXT DEFAULT 'pending',
       FloorPlanId INTEGER NOT NULL,
       FOREIGN KEY (FloorPlanId) REFERENCES FLOOR_PLAN(FloorPlanId) ON DELETE CASCADE
     )
   `);
 
-  // MEASURINGPOINT tabel
+  // ACCESS_POINT_READING tabel
   db.exec(`
-    CREATE TABLE IF NOT EXISTS MEASURINGPOINT (
-      MeasuringpointId INTEGER PRIMARY KEY AUTOINCREMENT,
-      Position REAL NOT NULL,
-      SignalStrength REAL NOT NULL,
-      AccessPointId INTEGER NOT NULL,
-      FOREIGN KEY (AccessPointId) REFERENCES ACCESS_POINT(AccessPointId) ON DELETE CASCADE
+    CREATE TABLE IF NOT EXISTS ACCESS_POINT_READING (
+      AccessPointReadingId INTEGER PRIMARY KEY AUTOINCREMENT,
+      Ssid TEXT,
+      Bssid TEXT,
+      Rssi REAL,
+      Frequency REAL,
+      Channel INTEGER,
+      MeasuringPointId INTEGER NOT NULL,
+      FOREIGN KEY (MeasuringPointId) REFERENCES MEASURINGPOINT(MeasuringpointId) ON DELETE CASCADE
     )
   `);
 
@@ -112,15 +137,27 @@ const initDb = () => {
     )
   `);
 
+  // Ensure extended metadata columns exist (added in schema overhaul)
+  ensureColumn('FLOOR_PLAN', 'UpdatedAt', 'DATETIME');
+  ensureColumn('FLOOR_PLAN', 'Building', 'TEXT');
+  ensureColumn('FLOOR_PLAN', 'Description', 'TEXT');
+  ensureColumn('FLOOR_PLAN', 'ImagePath', 'TEXT');
+  ensureColumn('FLOOR_PLAN', 'ImageOriginalName', 'TEXT');
+  ensureColumn('FLOOR_PLAN', 'ImageMimeType', 'TEXT');
+  ensureColumn('FLOOR_PLAN', 'ImageWidth', 'REAL');
+  ensureColumn('FLOOR_PLAN', 'ImageHeight', 'REAL');
+  ensureColumn('FLOOR_PLAN', 'ScaleFactor', 'REAL');
+  ensureColumn('FLOOR_PLAN', 'ReferencePoints', 'TEXT');
+
   console.log('Database initialiseret på:', dbPath);
 };
 
 // Database operationer
 const projectDb = {
   // FLOOR_PLAN operationer
-  createFloorPlan: (name) => {
-    const stmt = db.prepare('INSERT INTO FLOOR_PLAN (Name) VALUES (?)');
-    return stmt.run(name);
+  createFloorPlan: (name, building = null, description = null) => {
+    const stmt = db.prepare('INSERT INTO FLOOR_PLAN (Name, Building, Description) VALUES (?, ?, ?)');
+    return stmt.run(name, building, description);
   },
 
   getAllFloorPlans: () => {
@@ -132,8 +169,67 @@ const projectDb = {
   },
 
   updateFloorPlan: (id, name) => {
-    const stmt = db.prepare('UPDATE FLOOR_PLAN SET Name = ? WHERE FloorPlanId = ?');
+    const stmt = db.prepare('UPDATE FLOOR_PLAN SET Name = ?, UpdatedAt = CURRENT_TIMESTAMP WHERE FloorPlanId = ?');
     return stmt.run(name, id);
+  },
+
+  updateFloorPlanDetails: (id, updates = {}) => {
+    const setClauses = [];
+    const values = [];
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'name')) {
+      if (updates.name === undefined || updates.name === null) {
+        // Ignore nullish name updates to preserve NOT NULL constraint
+      } else {
+        setClauses.push('Name = ?');
+        values.push(updates.name);
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'building')) {
+      setClauses.push('Building = ?');
+      values.push(updates.building);
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'description')) {
+      setClauses.push('Description = ?');
+      values.push(updates.description);
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'imagePath')) {
+      setClauses.push('ImagePath = ?');
+      values.push(updates.imagePath);
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'imageOriginalName')) {
+      setClauses.push('ImageOriginalName = ?');
+      values.push(updates.imageOriginalName);
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'imageMimeType')) {
+      setClauses.push('ImageMimeType = ?');
+      values.push(updates.imageMimeType);
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'imageWidth')) {
+      setClauses.push('ImageWidth = ?');
+      values.push(updates.imageWidth);
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'imageHeight')) {
+      setClauses.push('ImageHeight = ?');
+      values.push(updates.imageHeight);
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'scaleFactor')) {
+      setClauses.push('ScaleFactor = ?');
+      values.push(updates.scaleFactor);
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'referencePoints')) {
+      setClauses.push('ReferencePoints = ?');
+      values.push(updates.referencePoints);
+    }
+
+    if (setClauses.length === 0) {
+      return { changes: 0 };
+    }
+
+    setClauses.push('UpdatedAt = CURRENT_TIMESTAMP');
+    const stmt = db.prepare(`UPDATE FLOOR_PLAN SET ${setClauses.join(', ')} WHERE FloorPlanId = ?`);
+    values.push(id);
+    return stmt.run(...values);
   },
 
   deleteFloorPlan: (id) => {
@@ -165,52 +261,61 @@ const projectDb = {
     return stmt.run(id);
   },
 
-  // ACCESS_POINT operationer
-  createAccessPoint: (internetName, location, frequencyBand, macAdress, floorPlanId) => {
-    const stmt = db.prepare('INSERT INTO ACCESS_POINT (InternetName, Location, FrequencyBand, MACAdress, FloorPlanId) VALUES (?, ?, ?, ?, ?)');
-    return stmt.run(internetName, location, frequencyBand, macAdress, floorPlanId);
-  },
-
-  getAccessPointsByFloorPlan: (floorPlanId) => {
-    return db.prepare('SELECT * FROM ACCESS_POINT WHERE FloorPlanId = ?').all(floorPlanId);
-  },
-
-  getAccessPoint: (id) => {
-    return db.prepare('SELECT * FROM ACCESS_POINT WHERE AccessPointId = ?').get(id);
-  },
-
-  updateAccessPoint: (id, internetName, location, frequencyBand, macAdress) => {
-    const stmt = db.prepare('UPDATE ACCESS_POINT SET InternetName = ?, Location = ?, FrequencyBand = ?, MACAdress = ? WHERE AccessPointId = ?');
-    return stmt.run(internetName, location, frequencyBand, macAdress, id);
-  },
-
-  deleteAccessPoint: (id) => {
-    const stmt = db.prepare('DELETE FROM ACCESS_POINT WHERE AccessPointId = ?');
-    return stmt.run(id);
-  },
-
   // MEASURINGPOINT operationer
-  createMeasuringPoint: (position, signalStrength, accessPointId) => {
-    const stmt = db.prepare('INSERT INTO MEASURINGPOINT (Position, SignalStrength, AccessPointId) VALUES (?, ?, ?)');
-    return stmt.run(position, signalStrength, accessPointId);
+  createMeasuringPoint: (name, x, y, floorPlanId, scanStatus = 'pending') => {
+    const stmt = db.prepare('INSERT INTO MEASURINGPOINT (Name, X, Y, FloorPlanId, ScanStatus) VALUES (?, ?, ?, ?, ?)');
+    return stmt.run(name, x, y, floorPlanId, scanStatus);
   },
 
-  getMeasuringPointsByAccessPoint: (accessPointId) => {
-    return db.prepare('SELECT * FROM MEASURINGPOINT WHERE AccessPointId = ?').all(accessPointId);
+  getMeasuringPointsByFloorPlan: (floorPlanId) => {
+    return db.prepare('SELECT * FROM MEASURINGPOINT WHERE FloorPlanId = ?').all(floorPlanId);
   },
 
   getMeasuringPoint: (id) => {
     return db.prepare('SELECT * FROM MEASURINGPOINT WHERE MeasuringpointId = ?').get(id);
   },
 
-  updateMeasuringPoint: (id, position, signalStrength) => {
-    const stmt = db.prepare('UPDATE MEASURINGPOINT SET Position = ?, SignalStrength = ? WHERE MeasuringpointId = ?');
-    return stmt.run(position, signalStrength, id);
+  getAllMeasuringPoints: () => {
+    return db.prepare('SELECT * FROM MEASURINGPOINT ORDER BY CreatedAt DESC').all();
+  },
+
+  updateMeasuringPoint: (id, name, x, y, scanStatus) => {
+    const stmt = db.prepare('UPDATE MEASURINGPOINT SET Name = ?, X = ?, Y = ?, ScanStatus = ?, UpdatedAt = CURRENT_TIMESTAMP WHERE MeasuringpointId = ?');
+    return stmt.run(name, x, y, scanStatus, id);
+  },
+
+  updateMeasuringPointStatus: (id, scanStatus) => {
+    const stmt = db.prepare('UPDATE MEASURINGPOINT SET ScanStatus = ?, UpdatedAt = CURRENT_TIMESTAMP WHERE MeasuringpointId = ?');
+    return stmt.run(scanStatus, id);
   },
 
   deleteMeasuringPoint: (id) => {
     const stmt = db.prepare('DELETE FROM MEASURINGPOINT WHERE MeasuringpointId = ?');
     return stmt.run(id);
+  },
+
+  // ACCESS_POINT_READING operationer
+  createAccessPointReading: (ssid, bssid, rssi, frequency, channel, measuringPointId) => {
+    const stmt = db.prepare('INSERT INTO ACCESS_POINT_READING (Ssid, Bssid, Rssi, Frequency, Channel, MeasuringPointId) VALUES (?, ?, ?, ?, ?, ?)');
+    return stmt.run(ssid, bssid, rssi, frequency, channel, measuringPointId);
+  },
+
+  getAccessPointReadingsByMeasuringPoint: (measuringPointId) => {
+    return db.prepare('SELECT * FROM ACCESS_POINT_READING WHERE MeasuringPointId = ?').all(measuringPointId);
+  },
+
+  getAccessPointReading: (id) => {
+    return db.prepare('SELECT * FROM ACCESS_POINT_READING WHERE AccessPointReadingId = ?').get(id);
+  },
+
+  deleteAccessPointReading: (id) => {
+    const stmt = db.prepare('DELETE FROM ACCESS_POINT_READING WHERE AccessPointReadingId = ?');
+    return stmt.run(id);
+  },
+
+  deleteAccessPointReadingsByMeasuringPoint: (measuringPointId) => {
+    const stmt = db.prepare('DELETE FROM ACCESS_POINT_READING WHERE MeasuringPointId = ?');
+    return stmt.run(measuringPointId);
   },
 
   // HEATMAP operationer

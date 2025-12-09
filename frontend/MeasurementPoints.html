@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Målepunkter</title>
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; margin: 0; }
     .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
@@ -46,6 +47,19 @@
     @keyframes spin {
       to { transform: rotate(360deg); }
     }
+    .layout-grid { display:flex; gap:16px; }
+    .sidebar { width:280px; }
+    .scanning-text { font-weight:500; color:#1e40af; }
+    .scanning-subtext { font-size:12px; color:#60a5fa; margin-top:4px; }
+    .mb-12 { margin-bottom:12px; }
+    .scrollable-content { max-height:300px; overflow:auto; }
+    .main-content { flex:1; }
+    .map-area { position:relative; }
+    .map-placeholder { border:1px dashed #cbd5e1; border-radius:6px; height:480px; display:flex; align-items:center; justify-content:center; }
+    .placeholder-text { text-align:center; color:#9ca3af; }
+    .mt-8 { margin-top:8px; }
+    .input-field { width:100%; padding:6px; margin-top:6px; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
   </style>
 </head>
 <body>
@@ -55,17 +69,17 @@
       <p class="muted">Klik på kortet for at tilføje målepunkter</p>
     </div>
 
-    <div class="grid lg:grid-cols-3" style="display:flex; gap:16px;">
-      <div style="width:280px;">
+    <div class="grid lg:grid-cols-3 layout-grid">
+      <div class="sidebar">
         <div id="scanningNotice" class="scanning-notice" style="display:none;">
           <div class="spinner"></div>
           <div>
-            <div style="font-weight:500; color:#1e40af;">Scanner WiFi-netværk...</div>
-            <div style="font-size:12px; color:#60a5fa; margin-top:4px;">Dette kan tage 10-15 sekunder</div>
+            <div class="scanning-text">Scanner WiFi-netværk...</div>
+            <div class="scanning-subtext">Dette kan tage 10-15 sekunder</div>
           </div>
         </div>
 
-        <div class="card" style="margin-bottom:12px;">
+        <div class="card mb-12">
           <div class="card-header"><strong>Statistik</strong></div>
           <div class="card-content">
             <div>Totale målepunkter: <strong id="totalCount">0</strong></div>
@@ -76,7 +90,7 @@
 
         <div class="card">
           <div class="card-header"><strong>Målepunkter oversigt</strong></div>
-          <div class="card-content" style="max-height:300px; overflow:auto;">
+          <div class="card-content scrollable-content">
             <table id="pointsTable">
               <thead><tr><th>Pos</th><th>Signal</th><th>SSID</th><th></th></tr></thead>
               <tbody><tr><td colspan="4" class="muted">Ingen målepunkter endnu.</td></tr></tbody>
@@ -85,12 +99,12 @@
         </div>
       </div>
 
-      <div style="flex:1;">
+      <div class="main-content">
         <div class="card">
           <div class="card-header"><strong>Interaktivt kort</strong><div class="muted">Klik for at tilføje nye målepunkter</div></div>
-          <div class="card-content" id="mapArea" style="position:relative;">
-            <div id="mapPlaceholder" style="border:1px dashed #cbd5e1; border-radius:6px; height:480px; display:flex; align-items:center; justify-content:center;">
-              <div style="text-align:center; color:#9ca3af;">Upload en plantegning først</div>
+          <div class="card-content map-area" id="mapArea">
+            <div id="mapPlaceholder" class="map-placeholder">
+              <div class="placeholder-text">Upload en plantegning først</div>
             </div>
           </div>
         </div>
@@ -101,19 +115,19 @@
   <div id="modal" style="display:none;" class="modal">
     <div class="panel">
       <h3 id="modalTitle">Tilføj målepunkt</h3>
-      <div style="margin-top:8px;">
+      <div class="mt-8">
         <label>Signalstyrke (dBm)</label>
-        <input id="inSignal" type="number" value="-60" style="width:100%; padding:6px; margin-top:6px;" />
+        <input id="inSignal" type="number" value="-60" class="input-field" />
       </div>
-      <div style="margin-top:8px;">
+      <div class="mt-8">
         <label>SSID</label>
-        <input id="inSsid" style="width:100%; padding:6px; margin-top:6px;" />
+        <input id="inSsid" class="input-field" />
       </div>
-      <div style="margin-top:8px;">
+      <div class="mt-8">
         <label>BSSID</label>
-        <input id="inBssid" style="width:100%; padding:6px; margin-top:6px;" />
+        <input id="inBssid" class="input-field" />
       </div>
-      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+      <div class="modal-actions">
         <button id="cancelBtn" class="btn btn-ghost">Annuller</button>
         <button id="saveBtn" class="btn">Gem</button>
       </div>
@@ -125,13 +139,16 @@
       let floorPlan = null;
       let measurements = [];
       let selectedPoint = null;
+      // Track points being scanned (temp ids) and which measurement is highlighted
       let pendingScans = new Set(); // Track points being scanned
+      let highlightedMeasurementId = null;
       const mapArea = document.getElementById('mapArea');
       const mapPlaceholder = document.getElementById('mapPlaceholder');
       const totalCount = document.getElementById('totalCount');
       const avgSignal = document.getElementById('avgSignal');
       const uniqueSsids = document.getElementById('uniqueSsids');
       const pointsTable = document.querySelector('#pointsTable tbody');
+      const readingListEl = document.getElementById('readingList');
       const modal = document.getElementById('modal');
       const scanningNotice = document.getElementById('scanningNotice');
       const inSignal = document.getElementById('inSignal');
@@ -148,7 +165,14 @@
           return;
         }
         const img = document.createElement('img');
-        img.src = floorPlan.imageUrl;
+        // Convert relative URL to backend absolute URL
+        let imgUrl = floorPlan.imageUrl;
+        if (imgUrl && imgUrl.startsWith('/')) {
+          const protocol = window.location.protocol;
+          const hostname = window.location.hostname;
+          imgUrl = `${protocol}//${hostname}:4000${imgUrl}`;
+        }
+        img.src = imgUrl;
         img.style.width = '100%';
         img.style.height = 'auto';
         img.style.display = 'block';
@@ -169,29 +193,99 @@
             const clickY = e.clientY - rect.top;
             const x = (clickX / displayedWidth) * originalWidth;
             const y = (clickY / displayedHeight) * originalHeight;
+            console.log('[MeasurementPoints] Click:', { 
+              clickX, clickY, 
+              displayedWidth, displayedHeight,
+              originalWidth, originalHeight,
+              finalX: x, finalY: y 
+            });
             postAutoAdd({ x, y, name: null });
           });
 
-          // add markers - convert from original coordinates to display coordinates
-          measurements.forEach(m => {
+          // Group measurements by coordinate and add one marker per group
+          const grouped = groupMeasurementsByCoordinate(measurements);
+          grouped.forEach(group => {
+            const count = group.measurements.length;
+            const avgSignal = count > 0 ? group.measurements.reduce((a,b)=>a+(b.signalStrength||0),0)/count : 0;
+            
             const dot = document.createElement('div');
             dot.className = 'dot';
-            const displayX = (m.x / originalWidth) * displayedWidth;
-            const displayY = (m.y / originalHeight) * displayedHeight;
+            const displayX = (group.x / originalWidth) * displayedWidth;
+            const displayY = (group.y / originalHeight) * displayedHeight;
+            console.log('[MeasurementPoints] Render dot:', {
+              originalX: group.x, originalY: group.y,
+              originalWidth, originalHeight,
+              displayedWidth, displayedHeight,
+              displayX, displayY
+            });
             dot.style.left = displayX + 'px';
             dot.style.top = displayY + 'px';
             
-            // Check if this point is currently being scanned
-            const isScanning = pendingScans.has(m.id);
+            // Check if any point in this group is currently being scanned
+            const isScanning = group.measurements.some(m => pendingScans.has(m.id));
             if (isScanning) {
               dot.classList.add('scanning');
               dot.title = 'Scanner WiFi-netværk...';
             } else {
-              dot.style.background = (typeof m.signalStrength === 'number' && m.signalStrength >= -60) ? '#22c55e' : ((typeof m.signalStrength === 'number' && m.signalStrength >= -70) ? '#eab308' : '#ef4444');
-              dot.title = (m.signalStrength !== null && m.signalStrength !== undefined) ? (m.signalStrength + ' dBm') : '';
+              dot.style.background = (avgSignal >= -60) ? '#22c55e' : ((avgSignal >= -70) ? '#eab308' : '#ef4444');
+              dot.title = `${count} netværk (Ø ${Math.round(avgSignal)} dBm)`;
             }
             
-            dot.addEventListener('click', function(ev){ ev.stopPropagation(); openModal('edit', m); });
+            // Add badge showing count if more than 1 network
+            if (count > 1 && !isScanning) {
+              const badge = document.createElement('div');
+              badge.style.position = 'absolute';
+              badge.style.top = '-6px';
+              badge.style.right = '-6px';
+              badge.style.background = '#1e40af';
+              badge.style.color = 'white';
+              badge.style.borderRadius = '50%';
+              badge.style.width = '16px';
+              badge.style.height = '16px';
+              badge.style.fontSize = '10px';
+              badge.style.fontWeight = 'bold';
+              badge.style.display = 'flex';
+              badge.style.alignItems = 'center';
+              badge.style.justifyContent = 'center';
+              badge.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+              badge.textContent = count > 99 ? '99+' : count;
+              dot.appendChild(badge);
+            }
+            
+            dot.addEventListener('click', function(ev){ 
+              ev.stopPropagation(); 
+              // Could open a modal showing all networks at this location
+              // For now, just open edit modal for first measurement
+              openModal('edit', group.measurements[0]); 
+            });
+            
+            // Add highlight ring if any measurement in this group is highlighted
+            if (highlightedMeasurementId !== null && group.measurements.some(m => m.id === highlightedMeasurementId)) {
+              const ring1 = document.createElement('div');
+              ring1.style.position = 'absolute';
+              ring1.style.left = displayX + 'px';
+              ring1.style.top = displayY + 'px';
+              ring1.style.width = '32px';
+              ring1.style.height = '32px';
+              ring1.style.border = '3px solid rgba(30, 58, 138, 0.9)';
+              ring1.style.borderRadius = '50%';
+              ring1.style.transform = 'translate(-50%, -50%)';
+              ring1.style.pointerEvents = 'none';
+              wrapper.appendChild(ring1);
+              
+              const ring2 = document.createElement('div');
+              ring2.style.position = 'absolute';
+              ring2.style.left = displayX + 'px';
+              ring2.style.top = displayY + 'px';
+              ring2.style.width = '40px';
+              ring2.style.height = '40px';
+              ring2.style.border = '2px solid rgba(30, 58, 138, 0.45)';
+              ring2.style.borderRadius = '50%';
+              ring2.style.transform = 'translate(-50%, -50%)';
+              ring2.style.pointerEvents = 'none';
+              wrapper.appendChild(ring2);
+            }
+            
             wrapper.appendChild(dot);
           });
         };
@@ -200,9 +294,28 @@
       }
 
       function renderStats() {
-        totalCount.textContent = String(measurements.length);
+        // Group measurements by coordinate to get accurate counts
+        const grouped = groupMeasurementsByCoordinate(measurements);
+        totalCount.textContent = String(grouped.length);
         avgSignal.textContent = measurements.length > 0 ? String(Math.round(measurements.reduce((a,b)=>a+b.signalStrength,0)/measurements.length)) : '0';
-        uniqueSsids.textContent = String(new Set(measurements.map(m=>m.ssid)).size);
+        uniqueSsids.textContent = String(new Set(measurements.map(m=>m.ssid).filter(s => s && s !== '<redacted>')).size);
+      }
+
+      // Group measurements by coordinate (same X, Y position)
+      function groupMeasurementsByCoordinate(measurements) {
+        const groups = {};
+        measurements.forEach(m => {
+          const key = `${Math.round(m.x)}_${Math.round(m.y)}`;
+          if (!groups[key]) {
+            groups[key] = {
+              x: m.x,
+              y: m.y,
+              measurements: []
+            };
+          }
+          groups[key].measurements.push(m);
+        });
+        return Object.values(groups);
       }
 
       function renderTable() {
@@ -211,16 +324,301 @@
           const tr = document.createElement('tr');
           const td = document.createElement('td'); td.colSpan = 4; td.className = 'muted'; td.textContent = 'Ingen målepunkter endnu.'; tr.appendChild(td); pointsTable.appendChild(tr); return;
         }
-        measurements.forEach(m => {
+
+        // Group measurements by coordinate
+        const grouped = groupMeasurementsByCoordinate(measurements);
+
+        grouped.forEach((group, groupIdx) => {
+          const count = group.measurements.length;
+          const avgSignal = Math.round(group.measurements.reduce((a,b)=>a+(b.signalStrength||0),0)/count);
+          
+          // Main row for the coordinate group
           const tr = document.createElement('tr');
-          const pos = document.createElement('td'); pos.textContent = `(${Math.round(m.x)}, ${Math.round(m.y)})`; tr.appendChild(pos);
-          const sig = document.createElement('td'); sig.textContent = m.signalStrength + ' dBm'; tr.appendChild(sig);
-          const ssid = document.createElement('td'); ssid.textContent = m.ssid; tr.appendChild(ssid);
+          tr.style.cursor = 'pointer';
+          tr.style.background = '#f8fafc';
+          
+          // Highlight all measurements in this group on hover
+          tr.addEventListener('mouseenter', () => {
+            tr.style.background = '#e0f2fe';
+            // Highlight first measurement in group
+            highlightedMeasurementId = group.measurements[0].id;
+            renderMap();
+          });
+          tr.addEventListener('mouseleave', () => {
+            tr.style.background = '#f8fafc';
+            highlightedMeasurementId = null;
+            renderMap();
+          });
+          
+          const pos = document.createElement('td'); 
+          pos.textContent = `(${Math.round(group.x)}, ${Math.round(group.y)})`;
+          pos.style.fontWeight = '600';
+          tr.appendChild(pos);
+          
+          const sig = document.createElement('td'); 
+          sig.textContent = `${avgSignal} dBm`;
+          sig.style.fontWeight = '600';
+          tr.appendChild(sig);
+          
+          const ssidCell = document.createElement('td'); 
+          ssidCell.textContent = `${count} netværk`;
+          ssidCell.style.fontWeight = '600';
+          ssidCell.style.color = '#3b82f6';
+          tr.appendChild(ssidCell);
+          
           const actions = document.createElement('td');
-          const editBtn = document.createElement('button'); editBtn.className='btn btn-ghost'; editBtn.textContent='Edit'; editBtn.addEventListener('click', ()=>openModal('edit', m));
-          const delBtn = document.createElement('button'); delBtn.className='btn btn-ghost'; delBtn.textContent='Delete'; delBtn.addEventListener('click', ()=>{ if(confirm('Slet?')) { postDelete(m.id); } });
-          actions.appendChild(editBtn); actions.appendChild(delBtn); tr.appendChild(actions);
+          const toggleBtn = document.createElement('button'); 
+          toggleBtn.className='btn btn-ghost'; 
+          toggleBtn.textContent = '▼';
+          toggleBtn.style.fontSize = '12px';
+          toggleBtn.dataset.groupId = 'group-' + groupIdx;
+          actions.appendChild(toggleBtn);
+          tr.appendChild(actions);
+          
           pointsTable.appendChild(tr);
+
+          // Create collapsible container for readings
+          const detailsRow = document.createElement('tr');
+          detailsRow.id = 'group-' + groupIdx;
+          detailsRow.style.display = 'none';
+          
+          const detailsCell = document.createElement('td');
+          detailsCell.colSpan = 4;
+          detailsCell.style.background = '#ffffff';
+          detailsCell.style.padding = '0';
+          
+          const detailsTable = document.createElement('table');
+          detailsTable.style.width = '100%';
+          detailsTable.style.fontSize = '13px';
+          
+          // Sort readings by signal strength (strongest first)
+          const sortedReadings = [...group.measurements].sort((a, b) => (b.signalStrength || -100) - (a.signalStrength || -100));
+          
+          sortedReadings.forEach(m => {
+            const subTr = document.createElement('tr');
+            subTr.style.background = '#fafafa';
+            
+            const indicator = document.createElement('td');
+            indicator.style.width = '10px';
+            indicator.style.paddingLeft = '20px';
+            indicator.textContent = '└';
+            indicator.style.color = '#cbd5e1';
+            subTr.appendChild(indicator);
+            
+            const subSig = document.createElement('td'); 
+            subSig.textContent = (m.signalStrength || 0) + ' dBm';
+            // Color code based on strength
+            if (m.signalStrength >= -60) subSig.style.color = '#22c55e';
+            else if (m.signalStrength >= -70) subSig.style.color = '#eab308';
+            else subSig.style.color = '#ef4444';
+            subTr.appendChild(subSig);
+            
+            const subSsid = document.createElement('td'); 
+            subSsid.textContent = m.ssid || '<redacted>';
+            if (!m.ssid || m.ssid === '<redacted>') {
+              subSsid.style.fontStyle = 'italic';
+              subSsid.style.color = '#9ca3af';
+              if (m.bssid) {
+                subSsid.textContent = m.bssid;
+                subSsid.style.fontFamily = 'monospace';
+              }
+            }
+            subTr.appendChild(subSsid);
+            
+            const subActions = document.createElement('td');
+            const delBtn = document.createElement('button'); 
+            delBtn.className='btn btn-ghost'; 
+            delBtn.textContent='×'; 
+            delBtn.style.fontSize = '16px';
+            delBtn.style.padding = '2px 6px';
+            delBtn.addEventListener('click', ()=>{ 
+              if(confirm('Slet denne måling?')) { 
+                postDelete(m.id); 
+              } 
+            });
+            subActions.appendChild(delBtn);
+            subTr.appendChild(subActions);
+            
+            detailsTable.appendChild(subTr);
+          });
+          
+          detailsCell.appendChild(detailsTable);
+          detailsRow.appendChild(detailsCell);
+          pointsTable.appendChild(detailsRow);
+
+          // Toggle handler
+          toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const targetId = toggleBtn.dataset.groupId;
+            const detailsRow = document.getElementById(targetId);
+            if (detailsRow.style.display === 'none') {
+              detailsRow.style.display = 'table-row';
+              toggleBtn.textContent = '▲';
+            } else {
+              detailsRow.style.display = 'none';
+              toggleBtn.textContent = '▼';
+            }
+          });
+        });
+      }
+
+      function getColorForSignal(strength) {
+        const normalized = Math.max(0, Math.min(1, (strength + 85) / 50));
+        if (normalized < 0.5) {
+          const factor = normalized * 2;
+          return `rgba(255, ${Math.floor(255 * factor)}, 0, 1)`;
+        } else {
+          const factor = (normalized - 0.5) * 2;
+          return `rgba(${Math.floor(255 * (1 - factor))}, 255, 0, 1)`;
+        }
+      }
+
+      function renderReadingsList() {
+        if (!readingListEl) return;
+        readingListEl.innerHTML = '';
+        if (!measurements || measurements.length === 0) {
+          readingListEl.textContent = 'Ingen målinger endnu';
+          return;
+        }
+        
+        measurements.forEach(m => {
+          const sig = (typeof m.signalStrength === 'number') ? m.signalStrength : (m.readings && m.readings[0] && (m.readings[0].rssi || m.readings[0].signal_level)) || null;
+          const ssid = m.ssid || (m.readings && m.readings[0] && m.readings[0].ssid) || '';
+          const bssid = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || '';
+          const freq = (m.frequency || (m.readings && m.readings[0] && m.readings[0].frequency)) || null;
+          const channel = (m.channel || (m.readings && m.readings[0] && m.readings[0].channel)) || null;
+          const ts = m.timestamp ? (new Date(m.timestamp)).toLocaleString() : (m.createdAt ? (new Date(m.createdAt)).toLocaleString() : '');
+
+          const row = document.createElement('div');
+          row.style.padding = '10px';
+          row.style.borderBottom = '1px solid #f3f4f6';
+          row.style.display = 'flex';
+          row.style.gap = '10px';
+          row.style.alignItems = 'center';
+
+          // Color dot based on signal
+          const dot = document.createElement('div');
+          dot.style.width = '14px';
+          dot.style.height = '14px';
+          dot.style.borderRadius = '50%';
+          dot.style.flex = '0 0 14px';
+          const color = (typeof getColorForSignal === 'function' && sig !== null) ? getColorForSignal(sig) : 'rgba(156,163,175,1)';
+          dot.style.background = color;
+          dot.style.boxShadow = '0 0 4px rgba(0,0,0,0.08)';
+
+          const content = document.createElement('div');
+          content.style.flex = '1 1 auto';
+
+          const title = document.createElement('div');
+          title.style.fontWeight = '700';
+          title.style.marginBottom = '3px';
+          
+          // If SSID is redacted or missing, show BSSID or a placeholder, but don't just say "redacted" if we have other info
+          let displayTitle = ssid;
+          if (!displayTitle || displayTitle === '<redacted>') {
+             if (bssid) {
+               displayTitle = `[${bssid}]`;
+             } else {
+               displayTitle = 'Unknown Network';
+             }
+          }
+          title.textContent = displayTitle;
+          
+          if (ssid === '<redacted>' || !ssid) {
+             title.style.fontStyle = 'italic';
+             title.style.color = '#6b7280';
+             title.title = 'SSID hidden by OS privacy settings';
+          }
+
+          const details = document.createElement('div');
+          details.style.fontSize = '12px';
+          details.style.color = '#6b7280';
+          details.style.display = 'flex';
+          details.style.flexWrap = 'wrap';
+          details.style.gap = '8px';
+
+          const idBadge = document.createElement('span');
+          idBadge.textContent = `MP #${m.id || '?'}`;
+          idBadge.style.background = 'rgba(34, 197, 94, 0.15)';
+          idBadge.style.color = 'rgba(21, 128, 61, 1)';
+          idBadge.style.padding = '2px 6px';
+          idBadge.style.borderRadius = '999px';
+          idBadge.style.fontSize = '11px';
+
+          const parentBadge = document.createElement('span');
+          if (m.parentId) {
+            parentBadge.textContent = `parent #${m.parentId}`;
+            parentBadge.style.background = '#fff7ed';
+            parentBadge.style.color = '#92400e';
+            parentBadge.style.padding = '2px 6px';
+            parentBadge.style.borderRadius = '999px';
+            parentBadge.style.fontSize = '11px';
+          }
+
+          const rssiSpan = document.createElement('span');
+          rssiSpan.textContent = `RSSI: ${sig !== null ? sig + ' dBm' : 'N/A'}`;
+          rssiSpan.title = 'Signal Strength';
+
+          const coordSpan = document.createElement('span');
+          coordSpan.textContent = `Pos: (${Math.round(m.x)}, ${Math.round(m.y)})`;
+
+          const bssidSpan = document.createElement('span');
+          bssidSpan.textContent = bssid ? `BSSID: ${bssid}` : '';
+          bssidSpan.style.opacity = bssid ? '1' : '0.6';
+          bssidSpan.style.fontSize = '12px';
+          bssidSpan.style.fontFamily = 'monospace';
+
+          const freqSpan = document.createElement('span');
+          if (freq) freqSpan.textContent = `Freq: ${freq} MHz`;
+          
+          const channelSpan = document.createElement('span');
+          if (channel) channelSpan.textContent = `Ch: ${channel}`;
+
+          const tsSpan = document.createElement('span');
+          tsSpan.textContent = ts;
+          tsSpan.style.marginLeft = 'auto';
+          tsSpan.style.fontSize = '11px';
+          tsSpan.style.color = '#9ca3af';
+
+          // Compose details
+          details.appendChild(idBadge);
+          if (m.parentId) details.appendChild(parentBadge);
+          details.appendChild(rssiSpan);
+          if (channel) details.appendChild(channelSpan);
+          if (freq) details.appendChild(freqSpan);
+          details.appendChild(coordSpan);
+          if (bssid) details.appendChild(bssidSpan);
+
+          content.appendChild(title);
+          content.appendChild(details);
+
+          row.appendChild(dot);
+          row.appendChild(content);
+          row.appendChild(tsSpan);
+
+          // Hover and click affordances
+          row.addEventListener('mouseenter', () => { 
+            row.style.background = '#f8fafc'; 
+            highlightedMeasurementId = m.id;
+            renderMap();
+          });
+          row.addEventListener('mouseleave', () => { 
+            row.style.background = 'transparent'; 
+            highlightedMeasurementId = null;
+            renderMap();
+          });
+          row.style.cursor = 'pointer';
+          row.addEventListener('click', () => {
+            // Toggle highlight on click for persistent selection
+            if (highlightedMeasurementId === m.id) {
+              highlightedMeasurementId = null;
+            } else {
+              highlightedMeasurementId = m.id;
+            }
+            renderMap();
+          });
+
+          readingListEl.appendChild(row);
         });
       }
 
@@ -311,21 +709,21 @@
           const msg = ev.data || {};
           if (msg.type === 'measurements:set') {
             const newMeasurements = Array.isArray(msg.measurements) ? msg.measurements : [];
-            
-            // Clear pending scans for measurements that now have data
+
+            // Clear pending scans for measurements that now have real data
             newMeasurements.forEach(m => {
-              // If measurement has real data (signalStrength), remove from pending
-              if (m.id && (m.signalStrength !== null && m.signalStrength !== undefined)) {
+              if (m && m.id && (m.signalStrength !== null && m.signalStrength !== undefined)) {
                 pendingScans.delete(m.id);
-                // Also check for temp IDs
-                const tempId = Array.from(pendingScans).find(id => id.startsWith('temp-'));
-                if (tempId) pendingScans.delete(tempId);
+                // Remove any temporary pending IDs (best-effort cleanup)
+                Array.from(pendingScans).forEach(pid => {
+                  if (String(pid).startsWith('temp-')) pendingScans.delete(pid);
+                });
               }
             });
-            
+
             measurements = newMeasurements;
             updateScanningNotice();
-            renderMap(); renderStats(); renderTable();
+            renderMap(); renderStats(); renderTable(); renderReadingsList();
           }
           if (msg.type === 'measurements:setFloorPlan') {
             floorPlan = msg.floorPlan || null;

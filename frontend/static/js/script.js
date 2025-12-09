@@ -22,21 +22,11 @@ class WiFiCoverageApp {
   // Load projects from database with full data
   async loadProjects() {
     try {
-      const basicProjects = await window.dbAPI.getAllProjects();
-      
-      // Map database fields to UI format
-      this.projects = basicProjects.map(fp => ({
-        id: fp.FloorPlanId,
-        name: fp.Name,
-        description: '', // Ikke længere i database
-        status: 'draft', // Ikke længere i database
-        created_at: fp.CreationDate,
-        updated_at: fp.CreationDate,
-        measurements: [],
-        floorPlan: null,
-        reports: []
-      }));
-      
+      const floorPlans = await window.dbAPI.getAllProjects();
+
+      const enriched = await Promise.all((floorPlans || []).map(fp => this.loadCompleteProjectData(fp)));
+      this.projects = enriched;
+
       this.updateUI();
       this.sendDataToIframes();
     } catch (err) {
@@ -49,28 +39,76 @@ class WiFiCoverageApp {
   // Load complete data for a single project
   async loadCompleteProjectData(basicProject) {
     try {
-      // I ny struktur hentes data anderledes
-      // For nu returnerer vi bare basis projektet
+      const floorPlanId = basicProject?.id || basicProject?.FloorPlanId;
+      if (!floorPlanId) {
+        throw new Error('Floor plan id mangler');
+      }
+
+      let measurementPoints = [];
+      try {
+        measurementPoints = await window.dbAPI.getMeasurementPoints(floorPlanId);
+      } catch (err) {
+        console.error('Error fetching measurement points:', err);
+      }
+
+      const measurements = (measurementPoints || []).flatMap(point => {
+        if (Array.isArray(point.readings) && point.readings.length > 0) {
+          return point.readings.map((reading, idx) => ({
+            id: `${point.id}-reading-${idx}`,
+            measurementPointId: point.id,
+            x: point.x,
+            y: point.y,
+            signalStrength: reading.rssi || reading.signal_level || null,
+            ssid: reading.ssid || '<redacted>',
+            bssid: reading.bssid || reading.mac || '',
+            frequency: reading.frequency || null,
+            channel: reading.channel || null,
+            timestamp: point.updatedAt || point.createdAt,
+            scanStatus: point.scan_status || point.scanStatus || 'done'
+          }));
+        }
+
+        return [{
+          id: `${point.id}-pending`,
+          measurementPointId: point.id,
+          x: point.x,
+          y: point.y,
+          signalStrength: null,
+          ssid: point.name || '<redacted>',
+          bssid: null,
+          frequency: null,
+          channel: null,
+          timestamp: point.updatedAt || point.createdAt,
+          scanStatus: point.scan_status || point.scanStatus || 'pending'
+        }];
+      });
+
+      const floorPlan = this.buildFloorPlanObject(basicProject);
+      const status = this.determineProjectStatus(floorPlan, measurements, basicProject?.status);
+
       return {
-        id: basicProject.FloorPlanId,
-        name: basicProject.Name,
-        description: '',
-        status: 'draft',
-        created_at: basicProject.CreationDate,
-        updated_at: basicProject.CreationDate,
-        measurements: [],
-        floorPlan: null,
-        reports: []
+        id: floorPlanId,
+        name: basicProject?.name || basicProject?.Name || 'Uden navn',
+        building: basicProject?.building || basicProject?.Building || '',
+        description: basicProject?.description || basicProject?.Description || '',
+        status,
+        createdAt: basicProject?.createdAt || basicProject?.CreationDate || new Date().toISOString(),
+        updatedAt: basicProject?.updatedAt || basicProject?.UpdatedAt || basicProject?.CreationDate || new Date().toISOString(),
+        measurements,
+        floorPlan,
+        reports: basicProject?.reports || []
       };
     } catch (err) {
-      console.error(`Error loading complete data for project ${basicProject.FloorPlanId}:`, err);
+      const fallbackId = basicProject?.id || basicProject?.FloorPlanId || 'unknown';
+      console.error(`Error loading complete data for project ${fallbackId}:`, err);
       return {
-        id: basicProject.FloorPlanId,
-        name: basicProject.Name,
-        description: '',
+        id: basicProject?.id || basicProject?.FloorPlanId,
+        name: basicProject?.name || basicProject?.Name || 'Uden navn',
+        building: basicProject?.building || '',
+        description: basicProject?.description || '',
         status: 'draft',
-        created_at: basicProject.CreationDate,
-        updated_at: basicProject.CreationDate,
+        createdAt: basicProject?.createdAt || basicProject?.CreationDate || new Date().toISOString(),
+        updatedAt: basicProject?.updatedAt || basicProject?.CreationDate || new Date().toISOString(),
         measurements: [],
         floorPlan: null,
         reports: []
@@ -134,6 +172,12 @@ class WiFiCoverageApp {
     }
     
     this.updateUI();
+    
+    // Re-send data to the newly active view to ensure it's up to date
+    // Small delay to ensure iframe is ready
+    setTimeout(() => {
+      this.sendDataToIframes();
+    }, 100);
   }
 
   updateUI() {
@@ -212,12 +256,14 @@ class WiFiCoverageApp {
     // Send floor plan to upload iframe
     if (this.iframes.upload && this.iframes.upload.contentWindow) {
       try {
+        const fpToSend = this.currentProject?.floorPlan || null;
+        console.log('[Main] Sending floor plan to upload iframe:', fpToSend);
         this.iframes.upload.contentWindow.postMessage({
           type: 'upload:setFloorPlan',
-          floorPlan: this.currentProject?.floorPlan || null
+          floorPlan: fpToSend
         }, '*');
       } catch (err) {
-        // ignore
+        console.error('[Main] Error sending to upload iframe:', err);
       }
     }
 
@@ -240,16 +286,28 @@ class WiFiCoverageApp {
     // Send data to heatmap iframe
     if (this.iframes.heatmap && this.iframes.heatmap.contentWindow) {
       try {
+        const fpData = this.currentProject?.floorPlan || null;
+        console.log('[Main] Sending floor plan to heatmap iframe:', fpData);
+        console.log('[Main] Current project:', this.currentProject);
+        
+        // Always send floor plan first, then measurements
         this.iframes.heatmap.contentWindow.postMessage({
           type: 'heatmap:setFloorPlan',
-          floorPlan: this.currentProject?.floorPlan || null
+          floorPlan: fpData
         }, '*');
-        this.iframes.heatmap.contentWindow.postMessage({
-          type: 'heatmap:set',
-          measurements: this.currentProject?.measurements || []
-        }, '*');
+        
+        // Small delay to ensure floor plan is processed first
+        setTimeout(() => {
+          if (this.iframes.heatmap && this.iframes.heatmap.contentWindow) {
+            this.iframes.heatmap.contentWindow.postMessage({
+              type: 'heatmap:set',
+              measurements: this.currentProject?.measurements || [],
+              project: this.currentProject
+            }, '*');
+          }
+        }, 100);
       } catch (err) {
-        // ignore
+        console.error('[Main] Error sending to heatmap iframe:', err);
       }
     }
 
@@ -345,7 +403,29 @@ class WiFiCoverageApp {
 
     // Heatmap events
     if (data.type === 'heatmap:ready') {
-      this.sendDataToIframes();
+      console.log('[Main] Heatmap iframe is ready, sending data');
+      // Delay to ensure iframe is fully initialized
+      setTimeout(() => {
+        if (this.iframes.heatmap && this.iframes.heatmap.contentWindow) {
+          const fpData = this.currentProject?.floorPlan || null;
+          console.log('[Main] Sending floor plan to ready heatmap:', fpData);
+          
+          this.iframes.heatmap.contentWindow.postMessage({
+            type: 'heatmap:setFloorPlan',
+            floorPlan: fpData
+          }, '*');
+          
+          setTimeout(() => {
+            if (this.iframes.heatmap && this.iframes.heatmap.contentWindow) {
+                this.iframes.heatmap.contentWindow.postMessage({
+                type: 'heatmap:set',
+                measurements: this.currentProject?.measurements || [],
+                project: this.currentProject
+              }, '*');
+            }
+          }, 50);
+        }
+      }, 100);
     }
 
     // Report events
@@ -383,18 +463,9 @@ class WiFiCoverageApp {
   // Project management methods
   async handleCreateProject(project) {
     try {
-      const newProject = await window.dbAPI.createProject(project.name, project.description);
-      // Create complete project structure
-      const fullProject = {
-        ...project,
-        id: newProject.id,
-        created_at: newProject.created_at,
-        updated_at: newProject.updated_at,
-        measurements: [],
-        floorPlan: null,
-        reports: [],
-        status: 'draft' // All new projects start as draft
-      };
+      const created = await window.dbAPI.createProject(project);
+      const fullProject = await this.loadCompleteProjectData(created);
+
       this.projects.push(fullProject);
       this.currentProject = fullProject;
       this.setCurrentView('upload');
@@ -414,6 +485,7 @@ class WiFiCoverageApp {
     try {
       const freshProject = await this.loadCompleteProjectData(project);
       this.currentProject = freshProject;
+      this.projects = this.projects.map(p => p.id === freshProject.id ? freshProject : p);
       
       console.log('Fresh project data loaded:', freshProject);
       
@@ -473,64 +545,32 @@ class WiFiCoverageApp {
     if (!this.currentProject) return;
     
     try {
-      // Map the property names from the upload iframe format
-      let floorPlanData = floorPlan.imageUrl || floorPlan.image;
-      const scaleFactor = floorPlan.scaleFactor || 1;
-      const referencePoints = floorPlan.referencePoints || [];
-      
-      // Hvis billedet er for stort (>10MB base64), upload som fil i stedet
-      if (floorPlanData && floorPlanData.length > 10 * 1024 * 1024) {
-        this.showNotification('Uploadér stor fil...', 'info');
-        
-        // Konverter base64 til blob og upload
-        const base64Data = floorPlanData.split(',')[1];
-        const byteCharacters = atob(base64Data);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
-        }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: 'image/png' });
-        const file = new File([blob], 'floorplan.png', { type: 'image/png' });
-        
-        const uploadResult = await window.fileUploadAPI.uploadFile(file, (progress) => {
-          console.log(`Upload progress: ${progress}%`);
-        });
-        
-        floorPlanData = uploadResult.file;
-        this.showNotification('Fil uploadet succesfuldt', 'success');
-      }
-      
-      // Save calibration data to database
-      console.log('Saving calibration:', {
-        projectId: this.currentProject.id,
-        floorPlanDataType: typeof floorPlanData,
-        floorPlanDataIsObject: typeof floorPlanData === 'object',
-        scaleFactor: scaleFactor,
-        referencePoints: referencePoints
-      });
-      await window.dbAPI.saveCalibration(this.currentProject.id, floorPlanData, scaleFactor, referencePoints);
-      
+      const details = {
+        imagePath: floorPlan.imageUrl || floorPlan.imagePath || null,
+        imageOriginalName: floorPlan.fileName || null,
+        imageMimeType: floorPlan.fileType || null,
+        imageWidth: floorPlan.width || null,
+        imageHeight: floorPlan.height || null,
+        scaleFactor: floorPlan.scaleFactor || null,
+        referencePoints: floorPlan.referencePoints || []
+      };
+
+      const updatedRecord = await window.dbAPI.updateFloorPlanDetails(this.currentProject.id, details);
+      console.log('[Main] Updated floor plan record from backend:', updatedRecord);
+      const floorPlanObject = this.buildFloorPlanObject(updatedRecord);
+      console.log('[Main] Built floor plan object:', floorPlanObject);
+
       const updatedProject = {
         ...this.currentProject,
-        floorPlan: {
-          image: floorPlanData,          // For internal use
-          imageUrl: floorPlanData,       // For upload iframe
-          scaleFactor: scaleFactor,
-          referencePoints: referencePoints,
-          fileName: floorPlan.fileName,
-          fileType: floorPlan.fileType,
-          width: floorPlan.width,
-          height: floorPlan.height
-        },
-        status: 'draft', // Still draft until explicitly saved
-        updatedAt: new Date()
+        floorPlan: floorPlanObject,
+        status: this.determineProjectStatus(floorPlanObject, this.currentProject.measurements || [], this.currentProject.status),
+        updatedAt: updatedRecord?.updatedAt || new Date().toISOString()
       };
-      
+
       this.currentProject = updatedProject;
       this.projects = this.projects.map(p => p.id === updatedProject.id ? updatedProject : p);
       this.updateUI();
-      this.sendDataToIframes(); // Send updated data to all iframes
+      this.sendDataToIframes();
       this.showNotification('Gulvplan uploadet og gemt', 'success');
     } catch (error) {
       console.error('Error saving floor plan:', error);
@@ -540,41 +580,43 @@ class WiFiCoverageApp {
 
   async handleAddMeasurement(measurement) {
     if (!this.currentProject) return;
-    // Try backend path first (preferred). If backend not available, fall back to local DB API.
     try {
-      const base = (window.location && window.location.origin) ? window.location.origin : '';
-      const url = base + '/api/measurement-points';
+      const url = '/api/measurement-points';
       const resp = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ x: measurement.x, y: measurement.y, name: measurement.ssid || measurement.name || null })
+        body: JSON.stringify({
+          x: measurement.x,
+          y: measurement.y,
+          name: measurement.ssid || measurement.name || null,
+          floorPlanId: this.currentProject.id
+        })
       });
 
       if (!resp.ok) throw new Error('Backend rejected measurement');
       const mp = await resp.json();
 
-      // Add pending measurement locally so user sees it immediately
       const pending = {
         id: mp.id,
+        measurementPointId: mp.id,
         x: mp.x,
         y: mp.y,
         signalStrength: null,
         ssid: mp.name || '',
         bssid: null,
-        timestamp: mp.createdAt
+        timestamp: mp.createdAt,
+        scanStatus: mp.scan_status || 'pending'
       };
 
       this.currentProject = {
         ...this.currentProject,
         measurements: [...(this.currentProject.measurements || []), pending],
-        updatedAt: new Date()
+        updatedAt: new Date().toISOString()
       };
       this.projects = this.projects.map(p => p.id === this.currentProject.id ? this.currentProject : p);
-      this.saveProjects();
       this.updateUI();
 
-      // Poll backend for scan completion then fetch children
-      const pollUrl = url + '/' + mp.id;
+      const pollUrl = `${url}/${mp.id}`;
       let attempts = 0;
       while (attempts < 40) {
         await new Promise(r => setTimeout(r, 1000));
@@ -584,29 +626,32 @@ class WiFiCoverageApp {
           if (!st.ok) continue;
           const latest = await st.json();
           if (latest.scan_status === 'done' || latest.scan_status === 'failed') {
-            const listResp = await fetch(url);
-            if (!listResp.ok) break;
-            const list = await listResp.json();
-            const children = (list || []).filter(i => i.parentId === mp.id);
-            if (children.length > 0) {
-              const childMeasurements = children.map(c => ({
-                id: c.id,
-                x: c.x,
-                y: c.y,
-                signalStrength: Array.isArray(c.readings) && c.readings[0] ? (c.readings[0].rssi || c.readings[0].signal_level || null) : null,
-                ssid: (Array.isArray(c.readings) && c.readings[0]) ? (c.readings[0].ssid || '') : '',
-                bssid: (Array.isArray(c.readings) && c.readings[0]) ? (c.readings[0].bssid || c.readings[0].mac || '') : '',
-                timestamp: c.createdAt
+            // In new schema, all readings are stored under the single measurement point
+            // Convert readings to measurements format for display
+            if (Array.isArray(latest.readings) && latest.readings.length > 0) {
+              const measurements = latest.readings.map((reading, idx) => ({
+                id: `${latest.id}-reading-${idx}`,
+                x: latest.x,
+                y: latest.y,
+                signalStrength: reading.rssi || reading.signal_level || null,
+                ssid: reading.ssid || '<redacted>',
+                bssid: reading.bssid || reading.mac || '',
+                frequency: reading.frequency || null,
+                channel: reading.channel || null,
+                timestamp: latest.updatedAt || latest.createdAt
               }));
-
+              // Remove the pending placeholder and add all readings as separate visual points
               this.currentProject = {
                 ...this.currentProject,
-                measurements: [...(this.currentProject.measurements || []), ...childMeasurements],
-                updatedAt: new Date()
+                measurements: [
+                  ...(this.currentProject.measurements || []).filter(m => m.measurementPointId !== mp.id && m.id !== mp.id),
+                  ...measurements
+                ],
+                updatedAt: new Date().toISOString()
               };
               this.projects = this.projects.map(p => p.id === this.currentProject.id ? this.currentProject : p);
-              this.saveProjects();
               this.updateUI();
+              this.sendDataToIframes();
             }
             break;
           }
@@ -615,29 +660,8 @@ class WiFiCoverageApp {
         }
       }
     } catch (err) {
-      // Fallback: save locally via dbAPI
-      try {
-        await window.dbAPI.addMeasurement(this.currentProject.id, {
-          x: measurement.x,
-          y: measurement.y,
-          signalStrength: measurement.signalStrength,
-          ssid: measurement.ssid,
-          frequency: measurement.frequency
-        });
-
-        this.currentProject = {
-          ...this.currentProject,
-          measurements: [...(this.currentProject.measurements || []), measurement],
-          status: 'draft',
-          updatedAt: new Date()
-        };
-        this.projects = this.projects.map(p => p.id === this.currentProject.id ? this.currentProject : p);
-        this.saveProjects();
-        this.updateUI();
-      } catch (dbErr) {
-        console.error('Error saving measurement locally:', dbErr);
-        this.showNotification('Fejl ved gemning af måling: ' + (dbErr.message || dbErr), 'error');
-      }
+      console.error('Error creating measurement point:', err);
+      this.showNotification('Fejl ved oprettelse af målepunkt: ' + err.message, 'error');
     }
   }
 
@@ -648,7 +672,7 @@ class WiFiCoverageApp {
     const updatedProject = {
       ...this.currentProject,
       measurements: (this.currentProject.measurements || []).map(m => m.id === id ? measurement : m),
-      updatedAt: new Date()
+      updatedAt: new Date().toISOString()
     };
     
     this.currentProject = updatedProject;
@@ -663,7 +687,7 @@ class WiFiCoverageApp {
     const updatedProject = {
       ...this.currentProject,
       measurements: (this.currentProject.measurements || []).filter(m => m.id !== id),
-      updatedAt: new Date()
+      updatedAt: new Date().toISOString()
     };
     
     this.currentProject = updatedProject;
@@ -675,13 +699,10 @@ class WiFiCoverageApp {
     if (!this.currentProject) return;
     
     try {
-      // Mark project as completed when report is saved
-      await window.dbAPI.updateProjectStatus(this.currentProject.id, 'completed');
-      
       const updatedProject = {
         ...this.currentProject,
         status: 'completed',
-        updatedAt: new Date()
+        updatedAt: new Date().toISOString()
       };
       
       this.currentProject = updatedProject;
@@ -693,6 +714,67 @@ class WiFiCoverageApp {
       console.error('Error updating project status:', error);
       this.showNotification('Fejl ved gemning af projektstatus: ' + error.message, 'error');
     }
+  }
+
+  buildFloorPlanObject(source) {
+    if (!source) {
+      console.warn('[Main] buildFloorPlanObject: source is null/undefined');
+      return null;
+    }
+    console.log('[Main] buildFloorPlanObject source:', source);
+    console.log('[Main] buildFloorPlanObject source keys:', Object.keys(source));
+    const imagePath = source.imagePath || source.imageUrl || null;
+    console.log('[Main] buildFloorPlanObject imagePath:', imagePath);
+    console.log('[Main] buildFloorPlanObject source.imagePath:', source.imagePath);
+    console.log('[Main] buildFloorPlanObject source.imageUrl:', source.imageUrl);
+    if (!imagePath) {
+      console.warn('[Main] buildFloorPlanObject: No imagePath found, returning null');
+      console.warn('[Main] Available fields in source:', Object.keys(source));
+      return null;
+    }
+
+    const referencePoints = Array.isArray(source.referencePoints)
+      ? source.referencePoints
+      : (source.scale && Array.isArray(source.scale.referencePoints) ? source.scale.referencePoints : []);
+
+    const scaleFactor = source.scaleFactor || (source.scale && source.scale.pixelsPerMeter) || null;
+
+    const floorPlan = {
+      imageUrl: imagePath,
+      imagePath: imagePath,
+      fileName: source.imageOriginalName || source.fileName || null,
+      fileType: source.imageMimeType || source.fileType || null,
+      width: source.imageWidth || source.width || null,
+      height: source.imageHeight || source.height || null,
+      scaleFactor,
+      referencePoints
+    };
+
+    if (scaleFactor) {
+      floorPlan.scale = { pixelsPerMeter: scaleFactor, referencePoints };
+    }
+
+    return floorPlan;
+  }
+
+  determineProjectStatus(floorPlan, measurements, baseStatus) {
+    if (baseStatus && typeof baseStatus === 'string') {
+      return baseStatus;
+    }
+
+    if (floorPlan && measurements && measurements.length > 0) {
+      const completedMeasurements = measurements.filter(m => m.signalStrength !== null);
+      if (completedMeasurements.length >= 3) {
+        return 'measuring';
+      }
+      return 'calibrated';
+    }
+
+    if (floorPlan) {
+      return 'calibrated';
+    }
+
+    return 'draft';
   }
 
   // Dialog management

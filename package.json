@@ -10,11 +10,12 @@
     "start": "node backend/index.js"
   },
   "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "node-wifi": "^2.0.15",
     "multer": "^2.0.2",
-    "sqlite3": "^5.1.7",
-    "better-sqlite3": "^12.4.1"
+    "node-wifi": "^2.0.15",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "concurrently": "^8.2.0",

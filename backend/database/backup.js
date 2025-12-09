@@ -12,11 +12,9 @@ const dbBackup = {
       const data = {
         floorPlans: db.prepare('SELECT * FROM FLOOR_PLAN').all(),
         rooms: db.prepare('SELECT * FROM ROOM').all(),
-        accessPoints: db.prepare('SELECT * FROM ACCESS_POINT').all(),
         measuringPoints: db.prepare('SELECT * FROM MEASURINGPOINT').all(),
+        accessPointReadings: db.prepare('SELECT * FROM ACCESS_POINT_READING').all(),
         heatmaps: db.prepare('SELECT * FROM HEATMAP').all(),
-        // Include measurementPoints (from data.json) so point-scans are preserved in backups
-        measurementPoints: (fs.existsSync(dataJsonPath) ? JSON.parse(fs.readFileSync(dataJsonPath, 'utf8')) : null),
         exportDate: new Date().toISOString()
       };
 
@@ -36,8 +34,8 @@ const dbBackup = {
       
       // Ryd eksisterende data (i korrekt rækkefølge pga. foreign keys)
       db.exec('DELETE FROM HEATMAP');
+      db.exec('DELETE FROM ACCESS_POINT_READING');
       db.exec('DELETE FROM MEASURINGPOINT');
-      db.exec('DELETE FROM ACCESS_POINT');
       db.exec('DELETE FROM ROOM');
       db.exec('DELETE FROM FLOOR_PLAN');
 
@@ -57,19 +55,36 @@ const dbBackup = {
         }
       }
 
-      // Indsæt ACCESS_POINT
-      if (data.accessPoints) {
-        const insertAccessPoint = db.prepare('INSERT INTO ACCESS_POINT (AccessPointId, InternetName, Location, FrequencyBand, MACAdress, FloorPlanId) VALUES (?, ?, ?, ?, ?, ?)');
-        for (const accessPoint of data.accessPoints) {
-          insertAccessPoint.run(accessPoint.AccessPointId, accessPoint.InternetName, accessPoint.Location, accessPoint.FrequencyBand, accessPoint.MACAdress, accessPoint.FloorPlanId);
+      // Indsæt MEASURINGPOINT (new schema)
+      if (data.measuringPoints) {
+        const insertMeasuringPoint = db.prepare('INSERT INTO MEASURINGPOINT (MeasuringpointId, Name, X, Y, CreatedAt, UpdatedAt, ScanStatus, FloorPlanId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+        for (const measuringPoint of data.measuringPoints) {
+          insertMeasuringPoint.run(
+            measuringPoint.MeasuringpointId, 
+            measuringPoint.Name, 
+            measuringPoint.X, 
+            measuringPoint.Y,
+            measuringPoint.CreatedAt || new Date().toISOString(),
+            measuringPoint.UpdatedAt || new Date().toISOString(),
+            measuringPoint.ScanStatus || 'done',
+            measuringPoint.FloorPlanId
+          );
         }
       }
 
-      // Indsæt MEASURINGPOINT
-      if (data.measuringPoints) {
-        const insertMeasuringPoint = db.prepare('INSERT INTO MEASURINGPOINT (MeasuringpointId, Position, SignalStrength, AccessPointId) VALUES (?, ?, ?, ?)');
-        for (const measuringPoint of data.measuringPoints) {
-          insertMeasuringPoint.run(measuringPoint.MeasuringpointId, measuringPoint.Position, measuringPoint.SignalStrength, measuringPoint.AccessPointId);
+      // Indsæt ACCESS_POINT_READING (new schema)
+      if (data.accessPointReadings) {
+        const insertReading = db.prepare('INSERT INTO ACCESS_POINT_READING (AccessPointReadingId, Ssid, Bssid, Rssi, Frequency, Channel, MeasuringPointId) VALUES (?, ?, ?, ?, ?, ?, ?)');
+        for (const reading of data.accessPointReadings) {
+          insertReading.run(
+            reading.AccessPointReadingId,
+            reading.Ssid,
+            reading.Bssid,
+            reading.Rssi,
+            reading.Frequency,
+            reading.Channel,
+            reading.MeasuringPointId
+          );
         }
       }
 
@@ -82,16 +97,6 @@ const dbBackup = {
       }
 
       console.log(`Database importeret fra: ${inputPath}`);
-      // If measurementPoints are present in the JSON, write them to backend/data.json
-      try {
-        if (data.measurementPoints) {
-          fs.writeFileSync(dataJsonPath, JSON.stringify(data.measurementPoints, null, 2), 'utf8');
-          console.log('measurementPoints written to', dataJsonPath);
-        }
-      } catch (e) {
-        console.warn('Could not write measurementPoints to data.json:', e.message || e);
-      }
-
       return true;
     } catch (error) {
       console.error('Fejl ved import:', error);
@@ -127,8 +132,8 @@ const dbBackup = {
       modified: stats.mtime,
       floorPlanCount: db.prepare('SELECT COUNT(*) as count FROM FLOOR_PLAN').get().count,
       roomCount: db.prepare('SELECT COUNT(*) as count FROM ROOM').get().count,
-      accessPointCount: db.prepare('SELECT COUNT(*) as count FROM ACCESS_POINT').get().count,
       measuringPointCount: db.prepare('SELECT COUNT(*) as count FROM MEASURINGPOINT').get().count,
+      readingCount: db.prepare('SELECT COUNT(*) as count FROM ACCESS_POINT_READING').get().count,
       heatmapCount: db.prepare('SELECT COUNT(*) as count FROM HEATMAP').get().count
     };
   }

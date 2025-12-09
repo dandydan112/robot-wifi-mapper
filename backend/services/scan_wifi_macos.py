@@ -6,19 +6,47 @@ Returns JSON list of networks with SSID, BSSID, RSSI, channel, etc.
 
 import json
 import sys
+import time
 
 try:
+    import objc
     from CoreWLAN import CWInterface
+    from CoreLocation import CLLocationManager, kCLAuthorizationStatusAuthorizedAlways, kCLAuthorizationStatusAuthorizedWhenInUse
     
-    # Get default Wi-Fi interface
-    interface = CWInterface.interface()
+    # Request Location Permission explicitly
+    # This is often needed for Python scripts to see SSIDs on macOS
+    class LocationDelegate(object):
+        def locationManager_didChangeAuthorizationStatus_(self, manager, status):
+            pass
+
+    location_manager = CLLocationManager.alloc().init()
+    delegate = LocationDelegate()
+    location_manager.setDelegate_(delegate)
+    location_manager.requestWhenInUseAuthorization()
+    
+    # Give it a moment to register
+    # time.sleep(0.5) 
+
+    # Get default Wi-Fi interface using CWWiFiClient (newer API)
+    try:
+        from CoreWLAN import CWWiFiClient
+        client = CWWiFiClient.sharedWiFiClient()
+        interface = client.interface()
+    except ImportError:
+        # Fallback to old way
+        interface = CWInterface.interface()
     
     if interface is None:
         print(json.dumps({"error": "No Wi-Fi interface found"}))
         sys.exit(1)
     
     # Scan for networks
-    networks_set, error = interface.scanForNetworksWithName_error_(None, None)
+    # scanForNetworksWithSSID_error_ is the newer method
+    try:
+        networks_set, error = interface.scanForNetworksWithSSID_error_(None, None)
+    except AttributeError:
+        # Fallback for older macOS
+        networks_set, error = interface.scanForNetworksWithName_error_(None, None)
     
     if error:
         print(json.dumps({"error": str(error)}))
@@ -37,6 +65,15 @@ try:
             bssid = network.bssid()
             rssi = network.rssiValue()
             
+            # Debug: Print to stderr if SSID is missing
+            if not ssid:
+                 # Try to get SSID from description if direct access fails (sometimes works)
+                 desc = str(network.description())
+                 if "SSID=" in desc:
+                     # simplistic parse attempt if needed, but usually ssid() should work
+                     pass
+                 sys.stderr.write(f"Debug: Found network with BSSID {bssid} but SSID is None/Empty\n")
+
             # Extract channel info
             channel_obj = network.wlanChannel()
             channel = int(channel_obj.channelNumber()) if channel_obj else None
