@@ -648,6 +648,10 @@ if (minRssiInput && maxRssiInput) {
 
       function rebuildAPList() {
         const aps = getAccessPoints();
+        
+        // Save current selection state BEFORE clearing
+        const previouslySelected = new Set(selectedAPs);
+        
         apList.innerHTML = '';
         selectedAPs.clear();
         if (!aps || aps.length === 0) {
@@ -687,14 +691,22 @@ if (minRssiInput && maxRssiInput) {
           input.type = 'checkbox';
           // Use the dedupe key (SSID or BSSID) as dataset key
           input.dataset.key = ap.key;
-          input.checked = true;
+          
+          // Restore previous selection if it existed, otherwise default to checked
+          const wasSelected = previouslySelected.size === 0 || previouslySelected.has(ap.key);
+          input.checked = wasSelected;
+          
           input.style.marginRight = '6px';
           label.appendChild(input);
           const labelText = ap.ssid ? `${ap.ssid} (${(ap.bssid||'').slice(0,8)})` : (ap.bssid || ap.key);
           label.appendChild(document.createTextNode(labelText + (ap.count && ap.count>1 ? ` — ${ap.count}` : '')));
           apList.appendChild(label);
           inputsByBssid.set(ap.key, input);
-          selectedAPs.add(ap.key);
+          
+          // Add to selectedAPs if checked
+          if (input.checked) {
+            selectedAPs.add(ap.key);
+          }
 
           input.addEventListener('change', () => {
             if (input.checked) selectedAPs.add(ap.key); else selectedAPs.delete(ap.key);
@@ -738,9 +750,22 @@ if (minRssiInput && maxRssiInput) {
               try {
                 const dataUrl = canvas.toDataURL('image/png');
                 console.log('✅ Canvas exported, size:', dataUrl.length, 'bytes');
+                
+                // Get current filter state (selected APs)
+                const checkedInputs = Array.from(apList.querySelectorAll('input[type=checkbox][data-key]'))
+                  .filter(i => i.checked)
+                  .map(i => i.dataset.key);
+                
                 window.parent.postMessage({
                   type: 'heatmap:exportImage',
-                  dataUrl: dataUrl
+                  dataUrl: dataUrl,
+                  filterState: {
+                    selectedAPs: checkedInputs,
+                    minRssi: parseFloat(minRssi.value),
+                    maxRssi: parseFloat(maxRssi.value),
+                    radius: parseInt(radiusInput.value, 10),
+                    opacity: parseInt(opacityInput.value, 10)
+                  }
                 }, '*');
               } catch (err) {
                 console.error('Error exporting canvas:', err);

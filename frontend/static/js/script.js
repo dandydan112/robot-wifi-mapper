@@ -482,11 +482,12 @@ class WiFiCoverageApp {
       this.requestHeatmapForExport();
     }
     if (data.type === 'heatmap:exportImage') {
-      // Forward heatmap image to report iframe
+      // Forward heatmap image and filter state to report iframe
       if (this.iframes.report && this.iframes.report.contentWindow) {
         this.iframes.report.contentWindow.postMessage({
           type: 'report:heatmapImage',
-          dataUrl: data.dataUrl
+          dataUrl: data.dataUrl,
+          filterState: data.filterState || null
         }, '*');
       }
     }

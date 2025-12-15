@@ -75,19 +75,46 @@
     let floorPlan = null;
     let measurements = [];
     let heatmapDataUrl = null; // Store heatmap as data URL for export
+    let filterState = null; // Store heatmap filter state (selected APs, RSSI range, etc.)
 
+    function getFilteredMeasurements() {
+      // Apply same filtering logic as HeatmapView if filterState exists
+      if (!filterState || !filterState.selectedAPs || filterState.selectedAPs.length === 0) {
+        return measurements; // No filter - return all
+      }
+      
+      const selectedSet = new Set(filterState.selectedAPs);
+      const minFilter = filterState.minRssi || -100;
+      const maxFilter = filterState.maxRssi || 0;
+      
+      return measurements.filter(m => {
+        // Match AP by SSID or BSSID (EXACT same logic as HeatmapView getKeyForMeasurement)
+        const b = m.bssid || null;
+        const s = (m.ssid && m.ssid !== '<redacted>' ? m.ssid.trim() : '');
+        const key = s || b || null;
+        
+        if (!key || !selectedSet.has(key)) return false;
+        
+        // Match RSSI range
+        const sig = m.signalStrength;
+        if (sig === null || sig === undefined) return false;
+        return sig >= minFilter && sig <= maxFilter;
+      });
+    }
+    
     function calculateStats() {
-      if (!measurements || measurements.length === 0) return { total:0, average:0, min:0, max:0, excellent:0, good:0, poor:0, uniqueSSIDs:0, uniqueBSSIDs:0 };
-      const strengths = measurements.map(m => m.signalStrength || 0);
+      const filtered = getFilteredMeasurements();
+      if (!filtered || filtered.length === 0) return { total:0, average:0, min:0, max:0, excellent:0, good:0, poor:0, uniqueSSIDs:0, uniqueBSSIDs:0 };
+      const strengths = filtered.map(m => m.signalStrength || 0);
       const total = strengths.length;
       const avg = Math.round(strengths.reduce((a,b)=>a+b,0)/total);
       const min = Math.min(...strengths);
       const max = Math.max(...strengths);
-      const excellent = measurements.filter(m=>m.signalStrength>=-50).length;
-      const good = measurements.filter(m=>m.signalStrength>=-70 && m.signalStrength<-50).length;
-      const poor = measurements.filter(m=>m.signalStrength<-70).length;
-      const uniqueSSIDs = new Set(measurements.map(m=>m.ssid)).size;
-      const uniqueBSSIDs = new Set(measurements.map(m=>m.bssid)).size;
+      const excellent = filtered.filter(m=>m.signalStrength>=-50).length;
+      const good = filtered.filter(m=>m.signalStrength>=-70 && m.signalStrength<-50).length;
+      const poor = filtered.filter(m=>m.signalStrength<-70).length;
+      const uniqueSSIDs = new Set(filtered.map(m=>m.ssid)).size;
+      const uniqueBSSIDs = new Set(filtered.map(m=>m.bssid)).size;
       return { total, average:avg, min, max, excellent, good, poor, uniqueSSIDs, uniqueBSSIDs };
     }
 
@@ -162,7 +189,9 @@
       }
       if (d.type === 'report:heatmapImage') {
         heatmapDataUrl = d.dataUrl;
+        filterState = d.filterState || null;
         console.log('📸 Heatmap image received for export');
+        console.log('📋 Filter state:', filterState);
       }
     });
 
