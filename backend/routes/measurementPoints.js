@@ -17,7 +17,7 @@ router.post('/', async (req, res) => {
     console.log('[measurementPoints] Creating measurement point', { x, y, name });
     const mp = await dataStore.createMeasurementPoint(x, y, name);
     
-    // Respond immediately (keeps latency < 500ms). Start scan in background.
+
     // Include a short statusMessage for debugging in dev UIs
     const resp = { ...mp, statusMessage: 'created, scan scheduled' };
     res.status(201).json(resp);
