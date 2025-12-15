@@ -32,7 +32,6 @@ function mapFloorPlan(row) {
     imageMimeType: row.ImageMimeType || null,
     imageWidth: row.ImageWidth || null,
     imageHeight: row.ImageHeight || null,
-    scaleFactor: row.ScaleFactor || null,
     referencePoints
   };
 }
@@ -184,7 +183,6 @@ app.put('/api/floor-plans/:id', (req, res) => {
       imageMimeType,
       imageWidth,
       imageHeight,
-      scaleFactor,
       referencePoints
     } = req.body || {};
 
@@ -209,7 +207,6 @@ app.put('/api/floor-plans/:id', (req, res) => {
     if (imageMimeType !== undefined) updates.imageMimeType = imageMimeType;
     if (imageWidth !== undefined) updates.imageWidth = imageWidth;
     if (imageHeight !== undefined) updates.imageHeight = imageHeight;
-    if (scaleFactor !== undefined) updates.scaleFactor = scaleFactor;
     if (referencePoints !== undefined) {
       if (referencePoints === null) {
         updates.referencePoints = null;
@@ -250,7 +247,7 @@ app.delete('/api/floor-plans', (req, res) => {
     const result = db.prepare('DELETE FROM FLOOR_PLAN').run();
     // Clean up related data (cascade should handle this, but being explicit)
     db.prepare('DELETE FROM HEATMAP').run();
-    db.prepare('DELETE FROM MEASURINGPOINT').run();
+    db.prepare('DELETE FROM MEASUREMENTPOINT').run();
     db.prepare('DELETE FROM ACCESS_POINT_READING').run();
     db.prepare('DELETE FROM ROOM').run();
     

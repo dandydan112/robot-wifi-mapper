@@ -13,15 +13,19 @@
        when embedding this HTML into the app. */
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; margin: 0; }
     .container { max-width: 1200px; margin: 0 auto; padding: 24px max-height: 1200px; }
-    .card { border: 1px solid #e5e7eb; border-radius: 8px; background: white; }
+    .card { border: 1px solid #e5e7eb; border-radius: 8px; background: white; transition: box-shadow 0.2s; }
+    .card:hover { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
     .card-header { padding: 12px 16px; border-bottom: 1px solid #f3f4f6; display:flex; align-items:center; justify-content:space-between }
     .card-content { padding: 16px; }
     .badge { padding: 4px 8px; border-radius: 9999px; font-size: 12px; }
-    .grid { display: grid; gap: 16px; }
+    .grid { display: grid; gap: 16px; align-items: start; }
     @media (min-width: 768px) { .md\:grid-cols-3 { grid-template-columns: repeat(3,1fr); } .md\:grid-cols-2 { grid-template-columns: repeat(2,1fr); } }
     @media (min-width: 1024px) { .lg\:grid-cols-3 { grid-template-columns: repeat(3,1fr); } }
     .clickable { cursor: pointer; }
+    .clickable:hover { background-color: #f9fafb; }
     .muted { color: #6b7280; }
+    .detail-tab { transition: all 0.2s; }
+    .detail-tab:hover { color: #0ea5e9; }
   </style>
 </head>
 <body>
@@ -82,8 +86,8 @@
 
     <!-- Template for a project card (hidden) -->
     <template id="projectCardTpl">
-      <div class="card clickable" style="display:flex; flex-direction:column; height:100%;">
-        <div class="card-header">
+      <div class="card" style="display:flex; flex-direction:column;">
+        <div class="card-header clickable">
           <div style="flex:1;">
             <div class="title" style="font-weight:600; margin-bottom:4px;"></div>
             <div class="desc muted" style="font-size:13px;"></div>
@@ -100,6 +104,43 @@
             <span class="updated"></span>
           </div>
         </div>
+        
+        <!-- Expanded details section (hidden by default) -->
+        <div class="project-details" style="display:none; border-top:1px solid #e5e7eb; padding:16px; background:#f9fafb;">
+          <!-- Tab navigation -->
+          <div style="display:flex; gap:8px; margin-bottom:16px; border-bottom:1px solid #e5e7eb;">
+            <button class="detail-tab active" data-tab="preview" style="padding:8px 12px; background:transparent; border:none; border-bottom:2px solid #0ea5e9; color:#0ea5e9; cursor:pointer; font-weight:500;">Preview</button>
+            <button class="detail-tab" data-tab="measurements" style="padding:8px 12px; background:transparent; border:none; border-bottom:2px solid transparent; color:#6b7280; cursor:pointer;">Målepunkter</button>
+            <button class="detail-tab" data-tab="heatmap" style="padding:8px 12px; background:transparent; border:none; border-bottom:2px solid transparent; color:#6b7280; cursor:pointer;">Heatmap</button>
+          </div>
+          
+          <!-- Tab content -->
+          <div class="tab-content" data-tab-content="preview">
+            <div class="floor-plan-preview" style="width:100%; min-height:200px; max-height:300px; background:#fff; border:1px solid #e5e7eb; border-radius:4px; display:flex; align-items:center; justify-content:center; overflow:hidden;">
+              <img class="preview-image" style="width:100%; height:auto; max-height:300px; display:none;" />
+              <span class="no-preview" style="color:#9ca3af;">Ingen plantegning uploadet</span>
+            </div>
+          </div>
+          
+          <div class="tab-content" data-tab-content="measurements" style="display:none;">
+            <div class="measurements-list" style="max-height:300px; overflow-y:auto;">
+              <div class="measurements-empty" style="color:#9ca3af; text-align:center; padding:20px;">Ingen målepunkter endnu</div>
+              <div class="measurements-items" style="display:none;"></div>
+            </div>
+          </div>
+          
+          <div class="tab-content" data-tab-content="heatmap" style="display:none;">
+            <div class="heatmap-preview" style="width:100%; min-height:200px; max-height:300px; background:#fff; border:1px solid #e5e7eb; border-radius:4px; display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative;">
+              <canvas class="heatmap-canvas" style="max-width:100%; max-height:300px; display:none;"></canvas>
+              <span class="no-heatmap" style="color:#9ca3af;">Generer heatmap fra målepunkter</span>
+            </div>
+          </div>
+          
+          <!-- Action buttons -->
+          <div style="display:flex; gap:8px; margin-top:16px;">
+            <button class="open-project-btn" style="width:100%; padding:8px 12px; background:#0ea5e9; color:white; border:none; border-radius:4px; cursor:pointer; font-weight:500;">Åbn projekt</button>
+          </div>
+        </div>
       </div>
     </template>
   </div>
@@ -112,7 +153,11 @@
 
       // Safe setter that re-renders the UI when projects change
       function setProjects(p) {
+        console.log('🔄 setProjects called with:', p);
+        console.log('  - Is array?', Array.isArray(p));
+        console.log('  - Length:', p?.length);
         projects = Array.isArray(p) ? p : [];
+        console.log('  - Projects after assignment:', projects.length);
         renderAll();
       }
 
@@ -148,8 +193,16 @@
       // Projects grid rendering utilities
       const grid = document.getElementById('projectsGrid');
       const tpl = document.getElementById('projectCardTpl');
+      let currentlyExpandedCard = null;
+      let expandedProjectId = null; // Track which project ID is expanded
 
       function renderAll() {
+        console.log('🎨 Dashboard renderAll called with', projects.length, 'projects');
+        console.log('  - expandedProjectId before render:', expandedProjectId);
+        
+        // Don't reset currentlyExpandedCard - we'll update it when we find the expanded project
+        currentlyExpandedCard = null;
+        
         // Stats
         document.getElementById('totalProjects').textContent = String(projects.length);
         document.getElementById('activeMeasurements').textContent = String(projects.filter(p => p.status === 'measuring').length);
@@ -158,18 +211,29 @@
         // Projects grid
         grid.innerHTML = '';
         if (!projects || projects.length === 0) {
+          console.log('⚠️ No projects to display');
           grid.innerHTML = '<p class="muted">Ingen projekter at vise.</p>';
           return;
         }
+        
+        console.log('✅ Rendering', projects.length, 'project cards');
 
         projects.forEach(project => {
           const node = tpl.content.cloneNode(true);
           const wrapper = node.querySelector('.card');
+          const cardHeader = node.querySelector('.card-header');
           const title = node.querySelector('.title');
           const desc = node.querySelector('.desc');
           const badge = node.querySelector('.badge');
           const ptext = node.querySelector('p');
           const updated = node.querySelector('.updated');
+          const detailsSection = node.querySelector('.project-details');
+          const previewImage = node.querySelector('.preview-image');
+          const noPreview = node.querySelector('.no-preview');
+          const measurementsEmpty = node.querySelector('.measurements-empty');
+          const measurementsItems = node.querySelector('.measurements-items');
+          const noHeatmap = node.querySelector('.no-heatmap');
+          const heatmapCanvas = node.querySelector('.heatmap-canvas');
 
           title.textContent = project.name || 'Uden navn';
           desc.textContent = project.building || '';
@@ -193,15 +257,310 @@
             }
           });
 
-          wrapper.addEventListener('click', function () {
-            // Send select event to parent
-            if (window.parent && typeof window.parent.postMessage === 'function') {
-              window.parent.postMessage({ type: 'dashboard:select', project }, '*');
+          // Toggle details on card header click
+          cardHeader.addEventListener('click', function () {
+            console.log('🖱️ Card clicked for project:', project.id, project.name);
+            const isCurrentlyExpanded = detailsSection.style.display === 'block';
+            console.log('  - Currently expanded?', isCurrentlyExpanded);
+            console.log('  - expandedProjectId:', expandedProjectId);
+            
+            // Close previously expanded card
+            if (currentlyExpandedCard && currentlyExpandedCard !== detailsSection) {
+              console.log('  - Closing previous card');
+              currentlyExpandedCard.style.display = 'none';
+              currentlyExpandedCard.style.opacity = '0';
+              currentlyExpandedCard.style.height = '0';
+              currentlyExpandedCard.style.overflow = 'hidden';
+            }
+            
+            // Toggle this card
+            const shouldExpand = !isCurrentlyExpanded;
+            console.log('  - Should expand?', shouldExpand);
+            
+            if (shouldExpand) {
+              console.log('  ✅ Expanding card for project:', project.id);
+              detailsSection.style.display = 'block';
+              detailsSection.style.opacity = '1';
+              detailsSection.style.height = 'auto';
+              detailsSection.style.overflow = 'visible';
+              currentlyExpandedCard = detailsSection;
+              expandedProjectId = project.id;
+              
+              // Load project details when expanding
+              loadProjectDetails(project, {
+                previewImage,
+                noPreview,
+                measurementsEmpty,
+                measurementsItems,
+                heatmapCanvas,
+                noHeatmap
+              });
+            } else {
+              console.log('  ❌ Collapsing card for project:', project.id);
+              detailsSection.style.display = 'none';
+              detailsSection.style.opacity = '0';
+              detailsSection.style.height = '0';
+              detailsSection.style.overflow = 'hidden';
+              currentlyExpandedCard = null;
+              expandedProjectId = null;
             }
           });
 
+          // Tab switching
+          const tabs = node.querySelectorAll('.detail-tab');
+          const tabContents = node.querySelectorAll('.tab-content');
+          tabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+              const targetTab = this.dataset.tab;
+              
+              // Update tab styles
+              tabs.forEach(t => {
+                t.style.borderBottomColor = 'transparent';
+                t.style.color = '#6b7280';
+              });
+              this.style.borderBottomColor = '#0ea5e9';
+              this.style.color = '#0ea5e9';
+              
+              // Show/hide content
+              tabContents.forEach(content => {
+                content.style.display = content.dataset.tabContent === targetTab ? 'block' : 'none';
+              });
+            });
+          });
+
+          // Open project button - opens project in work view
+          const openBtn = node.querySelector('.open-project-btn');
+          openBtn.addEventListener('click', function(ev) {
+            ev.stopPropagation();
+            if (window.parent && typeof window.parent.postMessage === 'function') {
+              window.parent.postMessage({ 
+                type: 'dashboard:select', 
+                project 
+              }, '*');
+            }
+          });
+
+          // Set default state to collapsed (ensure it's hidden)
+          detailsSection.style.display = 'none';
+          detailsSection.style.opacity = '0';
+          detailsSection.style.height = '0';
+          detailsSection.style.overflow = 'hidden';
+          
           grid.appendChild(node);
+          
+          // Restore expanded state if this was the expanded project
+          if (expandedProjectId === project.id) {
+            console.log('  🔄 Restoring expanded state for project:', project.id, project.name);
+            detailsSection.style.display = 'block';
+            detailsSection.style.opacity = '1';
+            detailsSection.style.height = 'auto';
+            detailsSection.style.overflow = 'visible';
+            currentlyExpandedCard = detailsSection;
+            loadProjectDetails(project, {
+              previewImage,
+              noPreview,
+              measurementsEmpty,
+              measurementsItems,
+              heatmapCanvas,
+              noHeatmap
+            });
+          }
         });
+      }
+
+      // Generate heatmap preview on canvas
+      function generateHeatmapPreview(project, canvas, noHeatmap) {
+        const floorPlan = project.floorPlan;
+        const measurements = project.measurements || [];
+
+        if (!floorPlan || !floorPlan.imageUrl || measurements.length === 0) {
+          canvas.style.display = 'none';
+          noHeatmap.style.display = 'block';
+          noHeatmap.textContent = 'Tilføj målepunkter for at generere heatmap';
+            if (canvas.parentElement) {
+              canvas.parentElement.style.height = 'auto';
+            }
+            return;
+        }
+
+        const img = new Image();
+        img.onload = function() {
+          const naturalWidth = img.naturalWidth || img.width || 1;
+          const naturalHeight = img.naturalHeight || img.height || 1;
+          const originalWidth = floorPlan.width || naturalWidth;
+          const originalHeight = floorPlan.height || naturalHeight;
+
+          const holder = canvas.parentElement;
+          const availableWidth = holder ? (holder.clientWidth || holder.offsetWidth || naturalWidth) : naturalWidth;
+          const maxHeight = 300;
+          const widthScale = availableWidth > 0 ? (availableWidth / originalWidth) : 1;
+          const heightScale = maxHeight > 0 ? (maxHeight / originalHeight) : 1;
+          const scale = Math.max(Math.min(widthScale, heightScale), 0.05);
+
+          const displayWidth = Math.max(1, Math.round(originalWidth * scale));
+          const displayHeight = Math.max(1, Math.round(originalHeight * scale));
+
+          canvas.width = displayWidth;
+          canvas.height = displayHeight;
+          canvas.style.display = 'block';
+          canvas.style.width = `${displayWidth}px`;
+          canvas.style.height = `${displayHeight}px`;
+          canvas.style.maxWidth = '100%';
+          canvas.style.maxHeight = `${maxHeight}px`;
+          if (holder) {
+            holder.style.height = `${displayHeight}px`;
+            holder.style.maxHeight = `${maxHeight}px`;
+          }
+
+          const ctx = canvas.getContext('2d');
+          ctx.clearRect(0, 0, displayWidth, displayHeight);
+          ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
+
+          const heatCanvas = document.createElement('canvas');
+          heatCanvas.width = displayWidth;
+          heatCanvas.height = displayHeight;
+          const heatCtx = heatCanvas.getContext('2d');
+
+          const baseRadius = 80;
+          const radius = Math.max(24, Math.min(baseRadius, Math.min(displayWidth, displayHeight) / 2));
+          const opacity = 0.7;
+
+          const toOriginalCoordinate = (value, originalSize) => {
+            if (!Number.isFinite(value) || !Number.isFinite(originalSize) || originalSize === 0) return null;
+            if (value >= 0 && value <= 1) return value * originalSize;
+            if (value >= 0 && value <= 100 && originalSize > 200) return (value / 100) * originalSize;
+            return value;
+          };
+
+          const extractSignal = (mp) => {
+            if (typeof mp.signalStrength === 'number') return mp.signalStrength;
+            if (typeof mp.rssi === 'number') return mp.rssi;
+            const firstReading = Array.isArray(mp.readings) && mp.readings.length > 0 ? mp.readings[0] : null;
+            if (firstReading) {
+              if (typeof firstReading.rssi === 'number') return firstReading.rssi;
+              if (typeof firstReading.signal_level === 'number') return firstReading.signal_level;
+            }
+            return null;
+          };
+
+          const previewPoints = measurements.map(mp => {
+            const sig = extractSignal(mp);
+            if (sig === null) return null;
+
+            const sourceX = toOriginalCoordinate(Number(mp.x), originalWidth);
+            const sourceY = toOriginalCoordinate(Number(mp.y), originalHeight);
+            if (!Number.isFinite(sourceX) || !Number.isFinite(sourceY)) return null;
+
+            const displayX = (sourceX / originalWidth) * displayWidth;
+            const displayY = (sourceY / originalHeight) * displayHeight;
+            if (!Number.isFinite(displayX) || !Number.isFinite(displayY)) return null;
+
+            return { x: displayX, y: displayY, signal: sig };
+          }).filter(Boolean);
+
+          previewPoints.forEach(point => {
+            const signalNormalized = Math.max(0, Math.min(1, (point.signal + 90) / 60));
+            let centerColor;
+            let edgeColor;
+            if (signalNormalized > 0.7) {
+              centerColor = 'rgba(16, 185, 129, 1)';
+              edgeColor = 'rgba(16, 185, 129, 0)';
+            } else if (signalNormalized > 0.4) {
+              centerColor = 'rgba(245, 158, 11, 1)';
+              edgeColor = 'rgba(245, 158, 11, 0)';
+            } else {
+              centerColor = 'rgba(220, 38, 38, 0.95)';
+              edgeColor = 'rgba(220, 38, 38, 0)';
+            }
+
+            const grad = heatCtx.createRadialGradient(point.x, point.y, 0, point.x, point.y, radius);
+            grad.addColorStop(0, centerColor);
+            grad.addColorStop(1, edgeColor);
+            heatCtx.fillStyle = grad;
+            heatCtx.fillRect(point.x - radius, point.y - radius, radius * 2, radius * 2);
+          });
+
+          ctx.save();
+          ctx.globalAlpha = opacity;
+          ctx.drawImage(heatCanvas, 0, 0);
+          ctx.restore();
+
+          previewPoints.forEach(point => {
+            ctx.beginPath();
+            ctx.arc(point.x, point.y, Math.max(2, 4 * scale), 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          });
+
+          noHeatmap.style.display = 'none';
+        };
+        img.onerror = function() {
+          canvas.style.display = 'none';
+          noHeatmap.style.display = 'block';
+          noHeatmap.textContent = 'Kunne ikke indlæse plantegning';
+        };
+        img.src = floorPlan.imageUrl;
+      }
+      
+      // Load and display project details
+      function loadProjectDetails(project, elements) {
+        const { previewImage, noPreview, measurementsEmpty, measurementsItems, heatmapCanvas, noHeatmap } = elements;
+        
+        // Show floor plan preview
+        if (project.floorPlan && project.floorPlan.imageUrl) {
+          previewImage.src = project.floorPlan.imageUrl;
+          previewImage.style.display = 'block';
+          noPreview.style.display = 'none';
+        } else {
+          previewImage.style.display = 'none';
+          noPreview.style.display = 'block';
+        }
+        
+        // Show measurements
+        if (project.measurements && project.measurements.length > 0) {
+          measurementsEmpty.style.display = 'none';
+          measurementsItems.style.display = 'block';
+          measurementsItems.innerHTML = '';
+          
+          project.measurements.forEach((mp, idx) => {
+            const mpEl = document.createElement('div');
+            mpEl.style.cssText = 'padding:8px; border-bottom:1px solid #e5e7eb; display:flex; justify-content:space-between;';
+            
+            const readingsCount = mp.readings?.length || 0;
+            const avgSignal = mp.readings && mp.readings.length > 0 
+              ? Math.round(mp.readings.reduce((sum, r) => sum + (r.rssi || 0), 0) / mp.readings.length)
+              : null;
+            
+            mpEl.innerHTML = `
+              <div>
+                <div style="font-weight:500;">Målepunkt ${idx + 1}</div>
+                <div style="font-size:12px; color:#6b7280;">
+                  ${readingsCount} access points
+                  ${avgSignal !== null ? `• Avg: ${avgSignal} dBm` : ''}
+                </div>
+              </div>
+              <div style="font-size:12px; color:#6b7280;">
+                x: ${Math.round(mp.x || 0)}, y: ${Math.round(mp.y || 0)}
+              </div>
+            `;
+            measurementsItems.appendChild(mpEl);
+          });
+        } else {
+          measurementsEmpty.style.display = 'block';
+          measurementsItems.style.display = 'none';
+        }
+        
+        // Generate and show heatmap preview
+        if (project.measurements && project.measurements.length > 0 && project.floorPlan) {
+          generateHeatmapPreview(project, heatmapCanvas, noHeatmap);
+        } else {
+          heatmapCanvas.style.display = 'none';
+          noHeatmap.style.display = 'block';
+          noHeatmap.textContent = 'Tilføj målepunkter for at generere heatmap';
+        }
       }
 
       // Create button sends event to parent
@@ -215,22 +574,33 @@
 
       // Listen for messages from parent
       window.addEventListener('message', function (ev) {
+        console.log('📬 Dashboard received message:', ev.data);
         try {
           const msg = ev.data || {};
           if (msg && msg.type === 'dashboard:setProjects') {
+            console.log('📥 Dashboard received setProjects:', msg.projects?.length || 0, 'projects');
+            console.log('Projects:', msg.projects);
             setProjects(msg.projects || []);
           }
           if (msg && msg.type === 'createProject:create' && msg.project) {
             // Add new project and persist
+            console.log('📥 Dashboard received createProject:create');
             setProjects([...projects, msg.project]);
           }
         } catch (err) {
-          // ignore malformed messages
+          console.error('Dashboard message error:', err);
         }
       }, false);
 
       // Initial render with empty projects (will be populated via postMessage)
+      console.log('🎬 Dashboard initialized, waiting for projects...');
       renderAll();
+      
+      // Notify parent that dashboard is ready
+      if (window.parent && typeof window.parent.postMessage === 'function') {
+        console.log('📢 Notifying parent: dashboard ready');
+        window.parent.postMessage({ type: 'dashboard:ready' }, '*');
+      }
     })();
   </script>
 </body>

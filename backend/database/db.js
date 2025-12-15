@@ -83,7 +83,6 @@ const initDb = () => {
       ImageMimeType TEXT,
       ImageWidth REAL,
       ImageHeight REAL,
-      ScaleFactor REAL,
       ReferencePoints TEXT
     )
   `);
@@ -98,10 +97,10 @@ const initDb = () => {
     )
   `);
 
-  // MEASURINGPOINT tabel
+  // MEASUREMENTPOINT tabel
   db.exec(`
-    CREATE TABLE IF NOT EXISTS MEASURINGPOINT (
-      MeasuringpointId INTEGER PRIMARY KEY AUTOINCREMENT,
+    CREATE TABLE IF NOT EXISTS MEASUREMENTPOINT (
+      MeasurementPointId INTEGER PRIMARY KEY AUTOINCREMENT,
       Name TEXT,
       X REAL NOT NULL,
       Y REAL NOT NULL,
@@ -122,8 +121,8 @@ const initDb = () => {
       Rssi REAL,
       Frequency REAL,
       Channel INTEGER,
-      MeasuringPointId INTEGER NOT NULL,
-      FOREIGN KEY (MeasuringPointId) REFERENCES MEASURINGPOINT(MeasuringpointId) ON DELETE CASCADE
+      MeasurementPointId INTEGER NOT NULL,
+      FOREIGN KEY (MeasurementPointId) REFERENCES MEASUREMENTPOINT(MeasurementPointId) ON DELETE CASCADE
     )
   `);
 
@@ -146,7 +145,6 @@ const initDb = () => {
   ensureColumn('FLOOR_PLAN', 'ImageMimeType', 'TEXT');
   ensureColumn('FLOOR_PLAN', 'ImageWidth', 'REAL');
   ensureColumn('FLOOR_PLAN', 'ImageHeight', 'REAL');
-  ensureColumn('FLOOR_PLAN', 'ScaleFactor', 'REAL');
   ensureColumn('FLOOR_PLAN', 'ReferencePoints', 'TEXT');
 
   console.log('Database initialiseret på:', dbPath);
@@ -213,10 +211,6 @@ const projectDb = {
       setClauses.push('ImageHeight = ?');
       values.push(updates.imageHeight);
     }
-    if (Object.prototype.hasOwnProperty.call(updates, 'scaleFactor')) {
-      setClauses.push('ScaleFactor = ?');
-      values.push(updates.scaleFactor);
-    }
     if (Object.prototype.hasOwnProperty.call(updates, 'referencePoints')) {
       setClauses.push('ReferencePoints = ?');
       values.push(updates.referencePoints);
@@ -261,47 +255,47 @@ const projectDb = {
     return stmt.run(id);
   },
 
-  // MEASURINGPOINT operationer
+  // MEASUREMENTPOINT operationer
   createMeasuringPoint: (name, x, y, floorPlanId, scanStatus = 'pending') => {
-    const stmt = db.prepare('INSERT INTO MEASURINGPOINT (Name, X, Y, FloorPlanId, ScanStatus) VALUES (?, ?, ?, ?, ?)');
+    const stmt = db.prepare('INSERT INTO MEASUREMENTPOINT (Name, X, Y, FloorPlanId, ScanStatus) VALUES (?, ?, ?, ?, ?)');
     return stmt.run(name, x, y, floorPlanId, scanStatus);
   },
 
   getMeasuringPointsByFloorPlan: (floorPlanId) => {
-    return db.prepare('SELECT * FROM MEASURINGPOINT WHERE FloorPlanId = ?').all(floorPlanId);
+    return db.prepare('SELECT * FROM MEASUREMENTPOINT WHERE FloorPlanId = ?').all(floorPlanId);
   },
 
   getMeasuringPoint: (id) => {
-    return db.prepare('SELECT * FROM MEASURINGPOINT WHERE MeasuringpointId = ?').get(id);
+    return db.prepare('SELECT * FROM MEASUREMENTPOINT WHERE MeasurementPointId = ?').get(id);
   },
 
   getAllMeasuringPoints: () => {
-    return db.prepare('SELECT * FROM MEASURINGPOINT ORDER BY CreatedAt DESC').all();
+    return db.prepare('SELECT * FROM MEASUREMENTPOINT ORDER BY CreatedAt DESC').all();
   },
 
   updateMeasuringPoint: (id, name, x, y, scanStatus) => {
-    const stmt = db.prepare('UPDATE MEASURINGPOINT SET Name = ?, X = ?, Y = ?, ScanStatus = ?, UpdatedAt = CURRENT_TIMESTAMP WHERE MeasuringpointId = ?');
+    const stmt = db.prepare('UPDATE MEASUREMENTPOINT SET Name = ?, X = ?, Y = ?, ScanStatus = ?, UpdatedAt = CURRENT_TIMESTAMP WHERE MeasurementPointId = ?');
     return stmt.run(name, x, y, scanStatus, id);
   },
 
   updateMeasuringPointStatus: (id, scanStatus) => {
-    const stmt = db.prepare('UPDATE MEASURINGPOINT SET ScanStatus = ?, UpdatedAt = CURRENT_TIMESTAMP WHERE MeasuringpointId = ?');
+    const stmt = db.prepare('UPDATE MEASUREMENTPOINT SET ScanStatus = ?, UpdatedAt = CURRENT_TIMESTAMP WHERE MeasurementPointId = ?');
     return stmt.run(scanStatus, id);
   },
 
   deleteMeasuringPoint: (id) => {
-    const stmt = db.prepare('DELETE FROM MEASURINGPOINT WHERE MeasuringpointId = ?');
+    const stmt = db.prepare('DELETE FROM MEASUREMENTPOINT WHERE MeasurementPointId = ?');
     return stmt.run(id);
   },
 
   // ACCESS_POINT_READING operationer
   createAccessPointReading: (ssid, bssid, rssi, frequency, channel, measuringPointId) => {
-    const stmt = db.prepare('INSERT INTO ACCESS_POINT_READING (Ssid, Bssid, Rssi, Frequency, Channel, MeasuringPointId) VALUES (?, ?, ?, ?, ?, ?)');
+    const stmt = db.prepare('INSERT INTO ACCESS_POINT_READING (Ssid, Bssid, Rssi, Frequency, Channel, MeasurementPointId) VALUES (?, ?, ?, ?, ?, ?)');
     return stmt.run(ssid, bssid, rssi, frequency, channel, measuringPointId);
   },
 
   getAccessPointReadingsByMeasuringPoint: (measuringPointId) => {
-    return db.prepare('SELECT * FROM ACCESS_POINT_READING WHERE MeasuringPointId = ?').all(measuringPointId);
+    return db.prepare('SELECT * FROM ACCESS_POINT_READING WHERE MeasurementPointId = ?').all(measuringPointId);
   },
 
   getAccessPointReading: (id) => {
@@ -314,7 +308,7 @@ const projectDb = {
   },
 
   deleteAccessPointReadingsByMeasuringPoint: (measuringPointId) => {
-    const stmt = db.prepare('DELETE FROM ACCESS_POINT_READING WHERE MeasuringPointId = ?');
+    const stmt = db.prepare('DELETE FROM ACCESS_POINT_READING WHERE MeasurementPointId = ?');
     return stmt.run(measuringPointId);
   },
 

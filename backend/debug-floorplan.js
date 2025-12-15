@@ -32,7 +32,6 @@ try {
     console.log('  ImageMimeType:', fp.ImageMimeType);
     console.log('  ImageWidth:', fp.ImageWidth);
     console.log('  ImageHeight:', fp.ImageHeight);
-    console.log('  ScaleFactor:', fp.ScaleFactor);
     console.log('  ReferencePoints:', fp.ReferencePoints);
     console.log('  CreationDate:', fp.CreationDate);
     console.log('  UpdatedAt:', fp.UpdatedAt);

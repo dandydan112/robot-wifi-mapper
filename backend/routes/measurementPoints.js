@@ -91,4 +91,23 @@ router.get('/', async (req, res) => {
   }
 });
 
+// Delete a measurement point
+router.delete('/:id', async (req, res) => {
+  const id = req.params.id;
+  
+  try {
+    console.log('[measurementPoints] DELETE /:id', id);
+    const result = await dataStore.deleteMeasurementPoint(id);
+    res.json(result);
+  } catch (err) {
+    console.error('Error deleting measurement point:', err);
+    if (err && err.code === 'not_found') {
+      res.status(404).json({ error: 'not_found' });
+    } else {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
+});
+
 module.exports = router;
+

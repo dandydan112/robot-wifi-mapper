@@ -1,6 +1,8 @@
 const { projectDb } = require('../database/db');
 
 async function createMeasurementPoint(x, y, name, floorPlanId) {
+  console.log('📍 createMeasurementPoint called:', { x, y, name, floorPlanId });
+  
   if (!floorPlanId) {
     const error = new Error('floorPlanId is required');
     error.code = 'missing_floor_plan_id';
@@ -15,6 +17,7 @@ async function createMeasurementPoint(x, y, name, floorPlanId) {
   }
 
   const result = projectDb.createMeasuringPoint(name, x, y, floorPlanId, 'pending');
+  console.log('✅ Measurement point created, ID:', result.lastInsertRowid);
   
   const mpId = result.lastInsertRowid;
   const created = projectDb.getMeasuringPoint(mpId);
@@ -40,7 +43,7 @@ async function getMeasurementPoint(id) {
   const readings = projectDb.getAccessPointReadingsByMeasuringPoint(id);
   
   return {
-    id: mp.MeasuringpointId.toString(),
+    id: mp.MeasurementPointId.toString(),
     name: mp.Name,
     x: mp.X,
     y: mp.Y,
@@ -61,15 +64,19 @@ async function getMeasurementPoint(id) {
 
 async function getAllMeasurementPoints(filters = {}) {
   const { floorPlanId } = filters;
+  console.log('🔍 getAllMeasurementPoints called:', { floorPlanId });
+  
   const mps = floorPlanId
     ? projectDb.getMeasuringPointsByFloorPlan(floorPlanId)
     : projectDb.getAllMeasuringPoints();
   
+  console.log(`📊 Found ${mps.length} measurement points`);
+  
   return mps.map(mp => {
-    const readings = projectDb.getAccessPointReadingsByMeasuringPoint(mp.MeasuringpointId);
+    const readings = projectDb.getAccessPointReadingsByMeasuringPoint(mp.MeasurementPointId);
     
     return {
-      id: mp.MeasuringpointId.toString(),
+      id: mp.MeasurementPointId.toString(),
       name: mp.Name,
       x: mp.X,
       y: mp.Y,
@@ -172,10 +179,40 @@ async function createMeasurementPointsFromReadings(originalId, readings) {
   return newPoints;
 }
 
+async function deleteMeasurementPoint(id) {
+  console.log('🗑️ deleteMeasurementPoint called:', id);
+  
+  // First check if exists
+  const mp = projectDb.getMeasuringPoint(id);
+  if (!mp) {
+    const error = new Error(`Measurement point ${id} not found`);
+    error.code = 'not_found';
+    throw error;
+  }
+  
+  // Delete all access point readings first
+  console.log('  Deleting access point readings...');
+  projectDb.deleteAccessPointReadingsByMeasuringPoint(id);
+  
+  // Then delete the measurement point
+  console.log('  Deleting measurement point...');
+  const result = projectDb.deleteMeasuringPoint(id);
+  
+  console.log('✅ Measurement point deleted:', id, 'Changes:', result.changes);
+  
+  return { 
+    success: true, 
+    id, 
+    deletedReadings: result.changes 
+  };
+}
+
 module.exports = {
   createMeasurementPoint,
   getMeasurementPoint,
   getAllMeasurementPoints,
   updateMeasurementPointStatus,
-  createMeasurementPointsFromReadings
+  createMeasurementPointsFromReadings,
+  deleteMeasurementPoint
 };
+

@@ -122,6 +122,11 @@
 
     const form = document.getElementById('createForm');
     const cancel = document.getElementById('cancel');
+    const submitBtn = document.getElementById('create');
+    const titleEl = document.querySelector('h2');
+    
+    let editingProject = null;
+    let isEditMode = false;
 
     cancel.addEventListener('click', () => {
       window.parent.postMessage({ type: 'createProject:cancel' }, '*');
@@ -134,18 +139,32 @@
       const description = document.getElementById('description').value.trim();
       if (!name || !building) return alert('Udfyld venligst alle påkrævede felter');
 
-      const project = {
-        id: `p-${Date.now()}`,
-        name,
-        building,
-        description,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        status: 'draft',
-        measurements: []
-      };
-
-      window.parent.postMessage({ type: 'createProject:create', project }, '*');
+      let project;
+      
+      if (isEditMode && editingProject) {
+        // Update existing project
+        project = {
+          ...editingProject,
+          name,
+          building,
+          description,
+          updatedAt: new Date().toISOString()
+        };
+        window.parent.postMessage({ type: 'createProject:update', project }, '*');
+      } else {
+        // Create new project
+        project = {
+          id: `p-${Date.now()}`,
+          name,
+          building,
+          description,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          status: 'draft',
+          measurements: []
+        };
+        window.parent.postMessage({ type: 'createProject:create', project }, '*');
+      }
     });
 
     // Optionally listen for initial props from parent (not used currently)
@@ -155,10 +174,33 @@
         // Could populate form fields if parent sends defaults
         if (d.project) {
           try {
+            editingProject = d.project;
+            isEditMode = d.isEdit === true;
+            
             document.getElementById('name').value = d.project.name || '';
             document.getElementById('building').value = d.project.building || '';
             document.getElementById('description').value = d.project.description || '';
-          } catch (e) {}
+            
+            // Update UI for edit mode
+            if (isEditMode) {
+              titleEl.textContent = 'Rediger projekt';
+              submitBtn.textContent = 'Gem ændringer';
+            } else {
+              titleEl.textContent = 'Opret nyt projekt';
+              submitBtn.textContent = 'Opret projekt';
+            }
+          } catch (e) {
+            console.error('Error setting project data:', e);
+          }
+        } else {
+          // Reset to create mode
+          editingProject = null;
+          isEditMode = false;
+          titleEl.textContent = 'Opret nyt projekt';
+          submitBtn.textContent = 'Opret projekt';
+          document.getElementById('name').value = '';
+          document.getElementById('building').value = '';
+          document.getElementById('description').value = '';
         }
       }
     });

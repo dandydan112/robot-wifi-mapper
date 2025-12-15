@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Rapport & Eksport</title>
   <style>
-    body { font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin:0; padding:16px; background:#fff; color:#111 }
+    body { font-family: Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin:0; padding:16px; background:#fff; color:#000 }
     .container { max-width:1100px; margin:18px auto; }
     .grid { display:grid; grid-template-columns: 1fr 320px; gap:18px }
     .card { border:1px solid #e6e6e6; border-radius:10px; padding:14px; background:#fff }
@@ -54,13 +54,6 @@
 
       <div class="actions">
         <div class="card">
-          <h4>Gem projekt</h4>
-          <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
-            <button id="saveProject" class="btn-primary">Gem til database</button>
-          </div>
-        </div>
-
-        <div class="card">
           <h4>Eksporter rapport</h4>
           <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
             <button id="exportPdf">Eksporter som PDF</button>
@@ -81,6 +74,7 @@
     let project = null;
     let floorPlan = null;
     let measurements = [];
+    let heatmapDataUrl = null; // Store heatmap as data URL for export
 
     function calculateStats() {
       if (!measurements || measurements.length === 0) return { total:0, average:0, min:0, max:0, excellent:0, good:0, poor:0, uniqueSSIDs:0, uniqueBSSIDs:0 };
@@ -98,10 +92,18 @@
     }
 
     function render() {
+      console.log('🖼️ ReportExport render() called');
+      console.log('  - project:', project);
+      console.log('  - project?.name:', project?.name);
+      console.log('  - floorPlan:', floorPlan ? 'EXISTS' : 'NULL');
+      console.log('  - measurements:', measurements?.length || 0);
+      
       const info = document.getElementById('projectInfo');
       if (!project) {
+        console.log('  ⚠️ No project - showing "Intet projekt valgt"');
         info.innerHTML = '<div class="muted">Intet projekt valgt</div>';
       } else {
+        console.log('  ✅ Project exists - rendering info');
         info.innerHTML = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
           <div><div class="muted">Projektnavn</div><div>${project.name||''}</div></div>
           <div><div class="muted">Bygning</div><div>${project.building||''}</div></div>
@@ -124,16 +126,50 @@
     }
 
     // Ask parent for data readiness
+    console.log('📢 ReportExport: Sending report:ready to parent');
     window.parent.postMessage({ type: 'report:ready' }, '*');
 
     window.addEventListener('message', (ev) => {
       const d = ev.data || {};
+      console.log('📋 ReportExport received message:', d.type, d);
       if (!d || !d.type) return;
-      if (d.type === 'report:setProject') { project = d.project; render(); }
-      if (d.type === 'report:setFloorPlan') { floorPlan = d.floorPlan; render(); }
-      if (d.type === 'report:setMeasurements') { measurements = d.measurements || []; render(); }
-      if (d.type === 'report:set') { project = d.project || project; floorPlan = d.floorPlan || floorPlan; measurements = d.measurements || measurements; render(); }
+      if (d.type === 'report:setProject') { 
+        console.log('  - Setting project:', d.project);
+        project = d.project; 
+        render(); 
+      }
+      if (d.type === 'report:setFloorPlan') { 
+        console.log('  - Setting floor plan:', d.floorPlan ? 'EXISTS' : 'NULL');
+        floorPlan = d.floorPlan; 
+        render(); 
+      }
+      if (d.type === 'report:setMeasurements') { 
+        console.log('  - Setting measurements:', d.measurements?.length || 0);
+        measurements = d.measurements || []; 
+        render(); 
+      }
+      if (d.type === 'report:set') {
+        console.log('  - Setting all data:');
+        console.log('    - project:', d.project?.name || 'NULL');
+        console.log('    - floorPlan:', d.floorPlan ? 'EXISTS' : 'NULL');
+        console.log('    - measurements:', d.measurements?.length || 0);
+        project = d.project || project; 
+        floorPlan = d.floorPlan || floorPlan; 
+        measurements = d.measurements || measurements; 
+        render(); 
+        // Request heatmap image from parent
+        requestHeatmapImage();
+      }
+      if (d.type === 'report:heatmapImage') {
+        heatmapDataUrl = d.dataUrl;
+        console.log('📸 Heatmap image received for export');
+      }
     });
+
+    function requestHeatmapImage() {
+      // Ask parent to generate and send heatmap image
+      window.parent.postMessage({ type: 'report:requestHeatmap' }, '*');
+    }
 
     document.getElementById('exportJson').addEventListener('click', () => {
       const data = { project, floorPlan, measurements, comments: document.getElementById('comments').value||'', exportedAt: new Date().toISOString() };
@@ -142,83 +178,84 @@
       const a = document.createElement('a'); a.href = url; a.download = `${(project?.name || 'report').replace(/\s+/g,'-')}-report.json`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
     });
 
-    document.getElementById('exportPdf').addEventListener('click', () => { alert('PDF eksport kræver backend/service - placeholder'); });
-    document.getElementById('exportPng').addEventListener('click', () => { alert('PNG eksport kræver heatmap rendering - placeholder'); });
-
-    // Save project to database
-    document.getElementById('saveProject').addEventListener('click', async () => {
-      if (!project) {
-        alert('Intet projekt at gemme');
+    document.getElementById('exportPdf').addEventListener('click', async () => {
+      if (!heatmapDataUrl) {
+        alert('Heatmap ikke klar. Vent venligst...');
+        requestHeatmapImage();
         return;
       }
 
-      try {
-        // Create database API client
-        const dbAPI = {
-          async saveReport(projectId, reportType, reportData) {
-            const response = await fetch(`/api/projects/${projectId}/reports`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ reportType, reportData })
-            });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            return response.json();
-          }
-        };
-
-        // Save report with comments (optimize data size)
-        const reportData = {
-          project: {
-            id: project.id,
-            name: project.name,
-            description: project.description,
-            building: project.building,
-            status: project.status,
-            updatedAt: project.updatedAt
-          },
-          floorPlan: floorPlan ? {
-            // Don't include the large image data, just metadata
-            scaleFactor: floorPlan.scaleFactor,
-            referencePoints: floorPlan.referencePoints,
-            width: floorPlan.width,
-            height: floorPlan.height
-          } : null,
-          measurements: measurements.map(m => ({
-            x: m.x,
-            y: m.y,
-            signalStrength: m.signalStrength,
-            ssid: m.ssid,
-            frequency: m.frequency,
-            timestamp: m.timestamp
-          })),
-          comments: document.getElementById('comments').value || '',
-          stats: calculateStats(),
-          savedAt: new Date().toISOString()
-        };
-
-        await dbAPI.saveReport(project.id, 'analysis-report', reportData);
-        
-        // Show success message
-        const button = document.getElementById('saveProject');
-        const originalText = button.textContent;
-        button.textContent = '✓ Gemt!';
-        button.style.background = '#10b981';
-        
-        setTimeout(() => {
-          button.textContent = originalText;
-          button.style.background = '';
-        }, 2000);
-        
-        // Notify parent window
-        window.parent.postMessage({
-          type: 'report:saved',
-          project: project
-        }, '*');
-        
-      } catch (error) {
-        console.error('Error saving report:', error);
-        alert('Fejl ved gemning: ' + error.message);
+      // Generate PDF using jsPDF (we'll add this library)
+      if (typeof window.jspdf === 'undefined') {
+        // Fallback: Open print dialog with heatmap
+        const printWindow = window.open('', '_blank');
+        const stats = calculateStats();
+        printWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>${project?.name || 'Rapport'} - WiFi Analyse</title>
+            <style>
+              body { font-family: Arial, sans-serif; margin: 20px; }
+              h1 { color: #0ea5a4; }
+              .info { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 20px 0; }
+              .info div { padding: 10px; background: #f5f5f5; border-radius: 5px; }
+              img { max-width: 100%; height: auto; border: 1px solid #ddd; }
+              .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 0; }
+              .stat { text-align: center; padding: 15px; background: #f5f5f5; border-radius: 5px; }
+              .stat-value { font-size: 24px; font-weight: bold; color: #0ea5a4; }
+              .stat-label { font-size: 12px; color: #666; margin-top: 5px; }
+            </style>
+          </head>
+          <body>
+            <h1>WiFi Dækningsrapport</h1>
+            <div class="info">
+              <div><strong>Projekt:</strong> ${project?.name || 'N/A'}</div>
+              <div><strong>Bygning:</strong> ${project?.building || 'N/A'}</div>
+              <div><strong>Dato:</strong> ${new Date().toLocaleDateString('da-DK')}</div>
+              <div><strong>Status:</strong> ${project?.status || 'N/A'}</div>
+            </div>
+            
+            <h2>Heatmap</h2>
+            <img src="${heatmapDataUrl}" alt="WiFi Heatmap" />
+            
+            <h2>Statistik</h2>
+            <div class="stats">
+              <div class="stat"><div class="stat-value">${stats.total}</div><div class="stat-label">Totale målinger</div></div>
+              <div class="stat"><div class="stat-value">${stats.average} dBm</div><div class="stat-label">Gennemsnit</div></div>
+              <div class="stat"><div class="stat-value">${stats.min} dBm</div><div class="stat-label">Minimum</div></div>
+              <div class="stat"><div class="stat-value">${stats.max} dBm</div><div class="stat-label">Maksimum</div></div>
+            </div>
+            
+            ${document.getElementById('comments').value ? `<h2>Kommentarer</h2><p>${document.getElementById('comments').value}</p>` : ''}
+            
+            <script type="text/javascript">
+              window.onload = () => {
+                setTimeout(() => window.print(), 500);
+              };
+            <\/script>
+          </body>
+          </html>
+        `);
+        printWindow.document.close();
+        return;
       }
+    });
+
+    document.getElementById('exportPng').addEventListener('click', () => {
+      if (!heatmapDataUrl) {
+        alert('Heatmap ikke klar. Vent venligst...');
+        requestHeatmapImage();
+        return;
+      }
+
+      // Download heatmap as PNG
+      const a = document.createElement('a');
+      a.href = heatmapDataUrl;
+      a.download = `${(project?.name || 'heatmap').replace(/\s+/g,'-')}-heatmap.png`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
     });
   </script>
 </body>

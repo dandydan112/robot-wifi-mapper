@@ -353,11 +353,17 @@ if (minRssiInput && maxRssiInput) {
       }
 
   function draw() {
+        console.log('🎨 HeatmapView draw() called');
+        console.log('  - floorPlan:', floorPlan ? 'EXISTS' : 'NULL');
+        console.log('  - measurements:', measurements?.length || 0);
         if (!floorPlan) {
+          console.warn('⚠️ No floor plan - showing placeholder');
           canvas.width = 800; canvas.height = 400; const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#f8fafc'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#9ca3af'; ctx.fillText('Upload en plantegning og tilføj målepunkter først',20,20); return; }
+        console.log('📷 Loading floor plan image:', floorPlan.imageUrl);
         const ctx = canvas.getContext('2d');
         const img = new Image();
         img.onload = () => {
+          console.log('✅ Floor plan image loaded successfully');
           // Use natural image dimensions to ensure consistency
           const originalWidth = floorPlan.width || img.naturalWidth;
           const originalHeight = floorPlan.height || img.naturalHeight;
@@ -634,6 +640,9 @@ if (minRssiInput && maxRssiInput) {
             }
           }
         };
+        img.onerror = (err) => {
+          console.error('❌ Failed to load floor plan image:', floorPlan.imageUrl, err);
+        };
         img.src = floorPlan.imageUrl;
       }
 
@@ -706,10 +715,14 @@ if (minRssiInput && maxRssiInput) {
         try {
           const msg = ev.data || {};
           if (msg.type === 'heatmap:set') {
+            console.log('🗺️ HeatmapView received measurements:', msg.measurements?.length || 0);
+            console.log('  First measurement:', msg.measurements?.[0]);
             measurements = Array.isArray(msg.measurements) ? msg.measurements : [];
             rebuildAPList(); draw();
           }
           if (msg.type === 'heatmap:setFloorPlan') {
+            console.log('🗺️ HeatmapView received floor plan:', msg.floorPlan ? 'EXISTS' : 'NULL');
+            console.log('  imageUrl:', msg.floorPlan?.imageUrl);
             floorPlan = msg.floorPlan || null; 
             // Reset cached dimensions when new floor plan is loaded
             cachedDisplayWidth = null;
@@ -718,7 +731,25 @@ if (minRssiInput && maxRssiInput) {
             setTimeout(updateRangeTrack,0);
             draw();
           }
-        } catch (err) {}
+          if (msg.type === 'heatmap:requestExport') {
+            console.log('📸 Export request received, generating canvas image...');
+            // Wait a moment for canvas to be fully rendered
+            setTimeout(() => {
+              try {
+                const dataUrl = canvas.toDataURL('image/png');
+                console.log('✅ Canvas exported, size:', dataUrl.length, 'bytes');
+                window.parent.postMessage({
+                  type: 'heatmap:exportImage',
+                  dataUrl: dataUrl
+                }, '*');
+              } catch (err) {
+                console.error('Error exporting canvas:', err);
+              }
+            }, 100);
+          }
+        } catch (err) {
+          console.error('HeatmapView message error:', err);
+        }
       }, false);
 
       if (window.parent && typeof window.parent.postMessage === 'function') {

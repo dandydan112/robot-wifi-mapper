@@ -317,6 +317,110 @@
         });
         return Object.values(groups);
       }
+      function notifyParentOfPointDeletion(measurementPointIds = [], tempMeasurementIds = []) {
+        const ids = Array.isArray(measurementPointIds) ? measurementPointIds : [measurementPointIds];
+        const tempIds = Array.isArray(tempMeasurementIds) ? tempMeasurementIds : [tempMeasurementIds];
+        if (window.parent && typeof window.parent.postMessage === 'function') {
+          window.parent.postMessage({
+            type: 'measurement:deletePoints',
+            measurementPointIds: ids.filter(id => id !== undefined && id !== null && String(id).trim() !== ''),
+            tempMeasurementIds: tempIds.filter(id => id !== undefined && id !== null && String(id).trim() !== '')
+          }, '*');
+        }
+      }
+
+      async function deleteMeasurementPoint(measurementPointId, options = {}) {
+        const { skipConfirm = false, skipRerender = false } = options;
+
+        const targetId = String(measurementPointId ?? '').trim();
+        if (!targetId) {
+          console.error('❌ No measurementPointId provided');
+          alert('Kunne ikke finde målepunktets ID.');
+          return false;
+        }
+
+        if (!skipConfirm) {
+          const confirmed = confirm('Er du sikker på at du vil slette dette målepunkt og alle tilhørende WiFi-målinger?');
+          if (!confirmed) {
+            return false;
+          }
+        }
+
+        notifyParentOfPointDeletion([targetId]);
+
+        const before = measurements.length;
+        measurements = measurements.filter(m => String(m.measurementPointId) !== targetId);
+        pendingScans.delete(targetId);
+
+        if (!skipRerender && measurements.length !== before) {
+          renderMap();
+          renderStats();
+          renderTable();
+          renderReadingsList();
+        }
+
+        return true;
+      }
+
+      async function deleteMeasurementGroup(group) {
+        if (!group || !Array.isArray(group.measurements) || group.measurements.length === 0) {
+          alert('Der findes ingen målinger at slette for dette punkt.');
+          return;
+        }
+
+        const persistedIds = Array.from(new Set(group.measurements
+          .map(m => m && m.measurementPointId)
+          .filter(id => id !== undefined && id !== null && String(id).trim() !== '' && !String(id).startsWith('temp-'))));
+
+        const tempIds = group.measurements
+          .filter(m => (!m || !m.measurementPointId) && m?.id)
+          .map(m => m.id);
+
+        if (persistedIds.length === 0 && tempIds.length === 0) {
+          alert('Der blev ikke fundet nogen gemte målepunkter ved disse koordinater.');
+          return;
+        }
+
+        const coordLabel = `(${Math.round(group.x)}, ${Math.round(group.y)})`;
+        const totalCount = persistedIds.length + tempIds.length;
+        const message = totalCount > 1
+          ? `Er du sikker på at du vil slette alle ${totalCount} målepunkter ved koordinatet ${coordLabel}?`
+          : `Er du sikker på at du vil slette målepunktet ved koordinatet ${coordLabel}?`;
+
+        if (!confirm(message)) {
+          return;
+        }
+
+        notifyParentOfPointDeletion(persistedIds, tempIds);
+
+        if (tempIds.length > 0) {
+          tempIds.forEach(id => {
+            postDelete(id);
+            pendingScans.delete(id);
+          });
+        }
+
+        const persistedSet = new Set(persistedIds.map(id => String(id)));
+        const tempSet = new Set(tempIds.map(id => String(id)));
+        const beforeLength = measurements.length;
+        measurements = measurements.filter(m => {
+          const mpId = String(m?.measurementPointId ?? '');
+          if (tempSet.has(String(m.id))) return false;
+          if (mpId && persistedSet.has(mpId)) return false;
+          return true;
+        });
+
+        group.measurements.forEach(m => {
+          if (m && m.id) pendingScans.delete(m.id);
+        });
+
+        if (measurements.length !== beforeLength) {
+          renderMap();
+          renderStats();
+          renderTable();
+          renderReadingsList();
+        }
+      }
 
       function renderTable() {
         pointsTable.innerHTML = '';
@@ -367,12 +471,31 @@
           tr.appendChild(ssidCell);
           
           const actions = document.createElement('td');
+          actions.style.display = 'flex';
+          actions.style.gap = '8px';
+          actions.style.alignItems = 'center';
+          
           const toggleBtn = document.createElement('button'); 
           toggleBtn.className='btn btn-ghost'; 
           toggleBtn.textContent = '▼';
           toggleBtn.style.fontSize = '12px';
           toggleBtn.dataset.groupId = 'group-' + groupIdx;
           actions.appendChild(toggleBtn);
+          
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'btn btn-ghost';
+          deleteBtn.textContent = '×';
+          deleteBtn.style.fontSize = '20px';
+          deleteBtn.style.fontWeight = 'bold';
+          deleteBtn.style.color = '#ef4444';
+          deleteBtn.style.lineHeight = '1';
+          deleteBtn.title = 'Slet målepunkt';
+          deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteMeasurementGroup(group);
+          });
+          actions.appendChild(deleteBtn);
+          
           tr.appendChild(actions);
           
           pointsTable.appendChild(tr);
@@ -707,7 +830,12 @@
       window.addEventListener('message', function(ev){
         try {
           const msg = ev.data || {};
+          console.log('📍 MeasurementPoints received message:', msg.type);
           if (msg.type === 'measurements:set') {
+            console.log('  - Measurements:', msg.measurements?.length || 0);
+            if (msg.measurements?.length > 0) {
+              console.log('  - First measurement:', msg.measurements[0]);
+            }
             const newMeasurements = Array.isArray(msg.measurements) ? msg.measurements : [];
 
             // Clear pending scans for measurements that now have real data
@@ -726,6 +854,10 @@
             renderMap(); renderStats(); renderTable(); renderReadingsList();
           }
           if (msg.type === 'measurements:setFloorPlan') {
+            console.log('  - Floor plan:', msg.floorPlan ? 'EXISTS' : 'NULL');
+            if (msg.floorPlan) {
+              console.log('  - imageUrl:', msg.floorPlan.imageUrl);
+            }
             floorPlan = msg.floorPlan || null;
             renderMap();
           }

@@ -105,13 +105,13 @@ Endpoints:
 - POST /api/projects/:id/calibration
 
   - Description: Save calibration / floor plan data for a project. The body may include base64 image data or a file URL (if uploaded).
-  - Body example: { floorPlanImage: '<base64 or url>', scaleFactor?: number, referencePoints?: [ ... ] }
+  - Body example: { floorPlanImage: '<base64 or url>', referencePoints?: [ ... ] }
   - Response: { message }
 
 - GET /api/projects/:id/calibration
 
   - Description: Get calibration data for a project.
-  - Response: { floor_plan_image|floor_plan_file_url, scale_factor, reference_points, ... }
+  - Response: { floor_plan_image|floor_plan_file_url, reference_points, ... }
 
 - POST /api/projects/:id/reports
 

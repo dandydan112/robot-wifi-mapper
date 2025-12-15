@@ -53,6 +53,10 @@ class DatabaseAPI {
     });
   }
 
+  async updateProjectStatus(id, status) {
+    return this.updateProject(id, { status });
+  }
+
   async deleteProject(id) {
     return this.request(`/floor-plans/${id}`, {
       method: 'DELETE'
@@ -66,6 +70,12 @@ class DatabaseAPI {
     return this.request(endpoint);
   }
 
+  async deleteMeasurementPoint(id) {
+    return this.request(`/measurement-points/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
+    });
+  }
+
   async updateFloorPlanDetails(floorPlanId, details) {
     return this.request(`/floor-plans/${floorPlanId}`, {
       method: 'PUT',
@@ -73,10 +83,9 @@ class DatabaseAPI {
     });
   }
 
-  async saveCalibration(floorPlanId, imagePath, scaleFactor, referencePoints) {
-    return this.updateFloorPlanDetails(floorPlanId, {
+  async saveCalibration(floorPlanId, imagePath, referencePoints) {
+    return this.updateFloorPlan(floorPlanId, {
       imagePath,
-      scaleFactor,
       referencePoints
     });
   }

@@ -40,15 +40,35 @@ class WiFiCoverageApp {
 
   // Load complete data for a single project
   async loadCompleteProjectData(basicProject) {
+    console.log('=== loadCompleteProjectData START ===');
+    console.log('Input basicProject:', basicProject);
     try {
       const floorPlanId = basicProject?.id || basicProject?.FloorPlanId;
+      console.log('Floor plan ID:', floorPlanId);
       if (!floorPlanId) {
         throw new Error('Floor plan id mangler');
+      }
+
+      // Fetch full floor plan data from database (includes ImagePath, ImageUrl, etc.)
+      let fullFloorPlanData = basicProject;
+      try {
+        console.log('🔍 Fetching full floor plan data from database...');
+        fullFloorPlanData = await window.dbAPI.getProject(floorPlanId);
+        console.log('📦 Full floor plan data:', {
+          hasImagePath: !!fullFloorPlanData.ImagePath,
+          hasImageUrl: !!fullFloorPlanData.imageUrl,
+          ImagePath: fullFloorPlanData.ImagePath,
+          imageUrl: fullFloorPlanData.imageUrl
+        });
+      } catch (err) {
+        console.error('Error fetching full floor plan:', err);
+        // Fallback to basicProject if fetch fails
       }
 
       let measurementPoints = [];
       try {
         measurementPoints = await window.dbAPI.getMeasurementPoints(floorPlanId);
+        console.log('Fetched measurement points:', measurementPoints?.length || 0);
       } catch (err) {
         console.error('Error fetching measurement points:', err);
       }
@@ -85,10 +105,13 @@ class WiFiCoverageApp {
         }];
       });
 
-      const floorPlan = this.buildFloorPlanObject(basicProject);
+      const floorPlan = this.buildFloorPlanObject(fullFloorPlanData);
+      console.log('Built floor plan object:', floorPlan ? 'EXISTS' : 'NULL');
       const status = this.determineProjectStatus(floorPlan, measurements, basicProject?.status);
+      console.log('Project status:', status);
+      console.log('Total measurements:', measurements?.length || 0);
 
-      return {
+      const result = {
         id: floorPlanId,
         name: basicProject?.name || basicProject?.Name || 'Uden navn',
         building: basicProject?.building || basicProject?.Building || '',
@@ -100,6 +123,10 @@ class WiFiCoverageApp {
         floorPlan,
         reports: basicProject?.reports || []
       };
+      
+      console.log('=== loadCompleteProjectData COMPLETE ===');
+      console.log('Returning project:', result.name);
+      return result;
     } catch (err) {
       const fallbackId = basicProject?.id || basicProject?.FloorPlanId || 'unknown';
       console.error(`Error loading complete data for project ${fallbackId}:`, err);
@@ -166,6 +193,11 @@ class WiFiCoverageApp {
   }
 
   setCurrentView(view) {
+    console.log('🔄 Switching to view:', view);
+    console.log('  - Current project:', this.currentProject?.name || 'NONE');
+    console.log('  - Floor plan:', this.currentProject?.floorPlan ? 'EXISTS' : 'NULL');
+    console.log('  - Measurements:', this.currentProject?.measurements?.length || 0);
+    
     this.currentView = view;
     
     // Reload projects when going to dashboard to ensure fresh data
@@ -237,33 +269,51 @@ class WiFiCoverageApp {
   }
 
   sendDataToIframes() {
+    console.log('📤 sendDataToIframes called');
+    console.log('  - Current project:', this.currentProject?.name || 'NONE');
+    console.log('  - Floor plan:', this.currentProject?.floorPlan ? 'EXISTS' : 'NULL');
+    console.log('  - Measurements:', this.currentProject?.measurements?.length || 0);
+    
     // Send projects to dashboard
     if (this.iframes.dashboard && this.iframes.dashboard.contentWindow) {
       try {
+        console.log('📤 Sending to dashboard:', this.projects.length, 'projects');
         this.iframes.dashboard.contentWindow.postMessage({
           type: 'dashboard:setProjects',
           projects: this.projects
         }, '*');
       } catch (err) {
-        // ignore
+        console.error('Error sending to dashboard:', err);
       }
+    } else {
+      console.warn('⚠️ Dashboard iframe not ready');
     }
 
     // Send floor plan to upload iframe
     if (this.iframes.upload && this.iframes.upload.contentWindow) {
       try {
+        console.log('📤 Sending to upload iframe:');
+        console.log('  - Floor plan:', this.currentProject?.floorPlan ? 'EXISTS' : 'NULL');
+        if (this.currentProject?.floorPlan) {
+          console.log('  - imageUrl:', this.currentProject.floorPlan.imageUrl);
+          console.log('  - width:', this.currentProject.floorPlan.width);
+          console.log('  - height:', this.currentProject.floorPlan.height);
+        }
         this.iframes.upload.contentWindow.postMessage({
           type: 'upload:setFloorPlan',
           floorPlan: this.currentProject?.floorPlan || null
         }, '*');
       } catch (err) {
-        // ignore
+        console.error('Error sending to upload:', err);
       }
     }
 
     // Send data to measurements iframe
     if (this.iframes.measurements && this.iframes.measurements.contentWindow) {
       try {
+        console.log('📤 Sending to measurements iframe:');
+        console.log('  - Floor plan:', this.currentProject?.floorPlan ? 'EXISTS' : 'NULL');
+        console.log('  - Measurements:', this.currentProject?.measurements?.length || 0);
         this.iframes.measurements.contentWindow.postMessage({
           type: 'measurements:setFloorPlan',
           floorPlan: this.currentProject?.floorPlan || null
@@ -273,13 +323,21 @@ class WiFiCoverageApp {
           measurements: this.currentProject?.measurements || []
         }, '*');
       } catch (err) {
-        // ignore
+        console.error('Error sending to measurements:', err);
       }
     }
 
     // Send data to heatmap iframe
     if (this.iframes.heatmap && this.iframes.heatmap.contentWindow) {
       try {
+        console.log('📤 Sending to heatmap: floor plan:', this.currentProject?.floorPlan ? 'EXISTS' : 'NULL');
+        console.log('📤 Sending to heatmap: measurements:', this.currentProject?.measurements?.length || 0);
+        if (this.currentProject?.floorPlan) {
+          console.log('  - Heatmap imageUrl:', this.currentProject.floorPlan.imageUrl);
+        }
+        if (this.currentProject?.measurements?.length > 0) {
+          console.log('  - First measurement:', this.currentProject.measurements[0]);
+        }
         this.iframes.heatmap.contentWindow.postMessage({
           type: 'heatmap:setFloorPlan',
           floorPlan: this.currentProject?.floorPlan || null
@@ -289,13 +347,18 @@ class WiFiCoverageApp {
           measurements: this.currentProject?.measurements || []
         }, '*');
       } catch (err) {
-        // ignore
+        console.error('Error sending to heatmap:', err);
       }
     }
 
     // Send data to report iframe
     if (this.iframes.report && this.iframes.report.contentWindow) {
       try {
+        console.log('📤 Sending to report iframe:');
+        console.log('  - Project:', this.currentProject?.name || 'NULL');
+        console.log('  - Floor plan:', this.currentProject?.floorPlan ? 'EXISTS' : 'NULL');
+        console.log('  - Measurements:', this.currentProject?.measurements?.length || 0);
+        
         this.iframes.report.contentWindow.postMessage({
           type: 'report:set',
           project: this.currentProject,
@@ -303,8 +366,10 @@ class WiFiCoverageApp {
           measurements: this.currentProject?.measurements || []
         }, '*');
       } catch (err) {
-        // ignore
+        console.error('Error sending to report iframe:', err);
       }
+    } else {
+      console.warn('⚠️ Report iframe not ready');
     }
   }
 
@@ -314,6 +379,17 @@ class WiFiCoverageApp {
     // Debug logging
     if (data.type) {
       console.log('Received message:', data.type, data);
+    }
+
+    // Dashboard ready - send projects immediately
+    if (data.type === 'dashboard:ready') {
+      console.log('✅ Dashboard is ready, sending projects now');
+      if (this.iframes.dashboard && this.iframes.dashboard.contentWindow) {
+        this.iframes.dashboard.contentWindow.postMessage({
+          type: 'dashboard:setProjects',
+          projects: this.projects
+        }, '*');
+      }
     }
 
     // Dashboard events
@@ -339,6 +415,7 @@ class WiFiCoverageApp {
 
     // Upload events
     if (data.type === 'upload:floorPlanUploaded') {
+      console.log('🔵 Received upload:floorPlanUploaded, floorPlan data:', data.floorPlan);
       if (data.floorPlan) {
         this.handleFloorPlanUploaded(data.floorPlan);
         // Show notification that floor plan was uploaded
@@ -379,8 +456,14 @@ class WiFiCoverageApp {
         this.showNotification('Målepunkt slettet.', 'info');
       }
     }
+    if (data.type === 'measurement:deletePoints') {
+      this.handleDeleteMeasurementPoints(data.measurementPointIds, data.tempMeasurementIds);
+    }
     if (data.type === 'measurements:ready') {
       this.sendDataToIframes();
+    }
+    if (data.type === 'measurements:changed') {
+      this.refreshCurrentProject(true);
     }
 
     // Heatmap events
@@ -390,7 +473,22 @@ class WiFiCoverageApp {
 
     // Report events
     if (data.type === 'report:ready') {
+      console.log('✅ Report iframe is ready, sending data');
       this.sendDataToIframes();
+    }
+    if (data.type === 'report:requestHeatmap') {
+      console.log('📸 Report requesting heatmap image');
+      // Request heatmap image from HeatmapView iframe
+      this.requestHeatmapForExport();
+    }
+    if (data.type === 'heatmap:exportImage') {
+      // Forward heatmap image to report iframe
+      if (this.iframes.report && this.iframes.report.contentWindow) {
+        this.iframes.report.contentWindow.postMessage({
+          type: 'report:heatmapImage',
+          dataUrl: data.dataUrl
+        }, '*');
+      }
     }
     if (data.type === 'report:saved') {
       // When report is saved, mark project as completed
@@ -403,6 +501,12 @@ class WiFiCoverageApp {
     if (data.type === 'createProject:create') {
       if (data.project) {
         this.handleCreateProject(data.project);
+        this.hideCreateProjectDialog();
+      }
+    }
+    if (data.type === 'createProject:update') {
+      if (data.project) {
+        this.handleUpdateProject(data.project);
         this.hideCreateProjectDialog();
       }
     }
@@ -438,6 +542,39 @@ class WiFiCoverageApp {
     }
   }
 
+  async handleUpdateProject(project) {
+    try {
+      // Update project in database
+      await window.dbAPI.updateProject(project.id, {
+        name: project.name,
+        building: project.building,
+        description: project.description,
+        updatedAt: project.updatedAt
+      });
+
+      // Reload project data
+      const fullProject = await this.loadCompleteProjectData(project);
+      
+      // Update in projects list
+      const index = this.projects.findIndex(p => p.id == project.id);
+      if (index !== -1) {
+        this.projects[index] = fullProject;
+      }
+      
+      // Update current project if it's the one being edited
+      if (this.currentProject && this.currentProject.id == project.id) {
+        this.currentProject = fullProject;
+      }
+      
+      this.updateUI();
+      this.sendDataToIframes();
+      this.showNotification('Projekt opdateret succesfuldt', 'success');
+    } catch (error) {
+      console.error('Error updating project:', error);
+      this.showNotification('Fejl ved opdatering af projekt: ' + error.message, 'error');
+    }
+  }
+
   async handleSelectProject(project) {
     console.log('Selecting project with data:', project);
     
@@ -447,6 +584,11 @@ class WiFiCoverageApp {
       this.currentProject = freshProject;
       
       console.log('Fresh project data loaded:', freshProject);
+      console.log('  - Floor plan:', freshProject.floorPlan ? 'EXISTS' : 'NULL');
+      console.log('  - Measurements:', freshProject.measurements?.length || 0);
+      if (freshProject.floorPlan) {
+        console.log('  - Floor plan imageUrl:', freshProject.floorPlan.imageUrl);
+      }
       
       // Determine which view to show based on project data
       if (freshProject.measurements && freshProject.measurements.length > 0) {
@@ -503,6 +645,15 @@ class WiFiCoverageApp {
   async handleFloorPlanUploaded(floorPlan) {
     if (!this.currentProject) return;
     
+    console.log('=== handleFloorPlanUploaded START ===');
+    console.log('Floor plan data received:', {
+      hasImageUrl: !!floorPlan.imageUrl,
+      hasImagePath: !!floorPlan.imagePath,
+      fileName: floorPlan.fileName,
+      width: floorPlan.width,
+      height: floorPlan.height
+    });
+    
     try {
       const details = {
         imagePath: floorPlan.imageUrl || floorPlan.imagePath || null,
@@ -510,14 +661,18 @@ class WiFiCoverageApp {
         imageMimeType: floorPlan.fileType || null,
         imageWidth: floorPlan.width || null,
         imageHeight: floorPlan.height || null,
-        scaleFactor: floorPlan.scaleFactor || null,
         referencePoints: floorPlan.referencePoints || []
       };
+      console.log('Sending to backend:', details);
 
       const updatedRecord = await window.dbAPI.updateFloorPlanDetails(this.currentProject.id, details);
-      console.log('[Main] Updated floor plan record from backend:', updatedRecord);
+      console.log('✅ Backend response received');
+      console.log('  - imagePath:', updatedRecord.imagePath);
+      console.log('  - imageUrl:', updatedRecord.imageUrl);
+      console.log('  - imageOriginalName:', updatedRecord.imageOriginalName);
+      
       const floorPlanObject = this.buildFloorPlanObject(updatedRecord);
-      console.log('[Main] Built floor plan object:', floorPlanObject);
+      console.log('📦 Built floor plan object:', floorPlanObject ? 'SUCCESS' : 'NULL');
 
       const updatedProject = {
         ...this.currentProject,
@@ -654,6 +809,97 @@ class WiFiCoverageApp {
     this.updateUI();
   }
 
+  async handleDeleteMeasurementPoints(measurementPointIds = [], tempMeasurementIds = []) {
+    const ids = (Array.isArray(measurementPointIds) ? measurementPointIds : [measurementPointIds])
+      .filter(id => id !== undefined && id !== null && String(id).trim() !== '')
+      .map(id => String(id));
+    const tempIds = (Array.isArray(tempMeasurementIds) ? tempMeasurementIds : [tempMeasurementIds])
+      .filter(id => id !== undefined && id !== null && String(id).trim() !== '')
+      .map(id => String(id));
+
+    if (ids.length === 0 && tempIds.length === 0) {
+      return;
+    }
+
+    const failed = [];
+    for (const id of ids) {
+      try {
+        await window.dbAPI.deleteMeasurementPoint(id);
+      } catch (error) {
+        console.error('Error deleting measurement point from database:', { id, error });
+        failed.push(id);
+      }
+    }
+
+    const failedSet = new Set(failed);
+    const idsSet = new Set(ids);
+    const tempSet = new Set(tempIds);
+
+    if (this.currentProject) {
+      const filteredMeasurements = (this.currentProject.measurements || []).filter(m => {
+        const mpId = m && m.measurementPointId !== undefined && m.measurementPointId !== null
+          ? String(m.measurementPointId)
+          : '';
+        const measurementId = String(m?.id ?? '');
+        if (tempSet.has(measurementId)) return false;
+        if (mpId && idsSet.has(mpId) && !failedSet.has(mpId)) return false;
+        return true;
+      });
+
+      this.currentProject = {
+        ...this.currentProject,
+        measurements: filteredMeasurements,
+        updatedAt: new Date()
+      };
+
+      this.projects = this.projects.map(p => p.id === this.currentProject.id ? this.currentProject : p);
+      this.updateUI();
+    }
+
+    if (failed.length > 0) {
+      this.showNotification(`Kunne ikke slette ${failed.length} målepunkt(er). Se konsollen for detaljer.`, 'error');
+    }
+
+    if (ids.length > failed.length || tempIds.length > 0) {
+      if (ids.length > failed.length) {
+        this.showNotification('Målepunkt slettet.', 'info');
+      }
+      await this.refreshCurrentProject(true);
+    } else {
+      this.sendDataToIframes();
+    }
+  }
+
+  async refreshCurrentProject(shouldBroadcast = false) {
+    if (!this.currentProject) {
+      return;
+    }
+
+    try {
+      const updatedProject = await this.loadCompleteProjectData({ ...this.currentProject });
+      this.currentProject = updatedProject;
+      this.projects = this.projects.map(p => p.id === updatedProject.id ? updatedProject : p);
+      this.updateUI();
+      if (shouldBroadcast) {
+        this.sendDataToIframes();
+      }
+    } catch (error) {
+      console.error('Error refreshing current project after measurement changes:', error);
+      this.showNotification('Kunne ikke genindlæse projektdata. Se konsollen for detaljer.', 'error');
+    }
+  }
+
+  requestHeatmapForExport() {
+    console.log('📸 Requesting heatmap image for export');
+    if (this.iframes.heatmap && this.iframes.heatmap.contentWindow) {
+      this.iframes.heatmap.contentWindow.postMessage({
+        type: 'heatmap:requestExport'
+      }, '*');
+    } else {
+      console.warn('⚠️ Heatmap iframe not available');
+    }
+  }
+
   async handleReportSaved(reportData) {
     if (!this.currentProject) return;
     
@@ -679,20 +925,29 @@ class WiFiCoverageApp {
   }
 
   buildFloorPlanObject(source) {
-    if (!source) return null;
-    console.log('[Main] buildFloorPlanObject source:', source);
-    console.log('[Main] buildFloorPlanObject source keys:', Object.keys(source));
-    const imagePath = source.imagePath || source.imageUrl || null;
-    console.log('[Main] buildFloorPlanObject imagePath:', imagePath);
-    console.log('[Main] buildFloorPlanObject source.imagePath:', source.imagePath);
-    console.log('[Main] buildFloorPlanObject source.imageUrl:', source.imageUrl);
-    if (!imagePath) return null;
+    if (!source) {
+      console.log('⚠️ buildFloorPlanObject: source is null/undefined');
+      return null;
+    }
+    console.log('📋 buildFloorPlanObject input:', {
+      hasImagePath: !!source.imagePath,
+      hasImageUrl: !!source.imageUrl,
+      hasImagePathDB: !!source.ImagePath,
+      imagePathLength: source.imagePath?.length,
+      imageUrlLength: source.imageUrl?.length,
+      ImagePathLength: source.ImagePath?.length
+    });
+    // Database returns ImagePath (capital I), frontend uses imagePath (lowercase i)
+    const imagePath = source.imagePath || source.imageUrl || source.ImagePath || null;
+    if (!imagePath) {
+      console.log('⚠️ buildFloorPlanObject: No imagePath or imageUrl found');
+      return null;
+    }
+    console.log('✅ buildFloorPlanObject: Using imagePath:', imagePath.substring(0, 50) + '...');
 
     const referencePoints = Array.isArray(source.referencePoints)
       ? source.referencePoints
       : (source.scale && Array.isArray(source.scale.referencePoints) ? source.scale.referencePoints : []);
-
-    const scaleFactor = source.scaleFactor || (source.scale && source.scale.pixelsPerMeter) || null;
 
     const floorPlan = {
       imageUrl: imagePath,
@@ -701,16 +956,8 @@ class WiFiCoverageApp {
       fileType: source.imageMimeType || source.fileType || null,
       width: source.imageWidth || source.width || null,
       height: source.imageHeight || source.height || null,
-      scaleFactor,
       referencePoints
     };
-
-    if (scaleFactor) {
-      floorPlan.scale = {
-        pixelsPerMeter: scaleFactor,
-        referencePoints
-      };
-    }
 
     return floorPlan;
   }
