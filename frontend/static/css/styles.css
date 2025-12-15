@@ -474,3 +474,12 @@ body {
     opacity: 1;
   }
 }
+
+/* Slider thumbs: allow pointer events so stacked double-range works */
+input[type="range"]::-webkit-slider-thumb {
+  pointer-events: auto;
+}
+
+input[type="range"]::-moz-range-thumb {
+  pointer-events: auto;
+}

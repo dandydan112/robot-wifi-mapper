@@ -6,284 +6,168 @@
   <title>Heatmap</title>
   <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
   <link rel="stylesheet" href="/static/css/styles.css">
+
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial; margin: 0; }
-    .container { max-width: 1600px; margin: 0 auto; padding: 24px; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
     .grid { display: grid; gap: 16px; }
+    @media (min-width: 1024px) { .lg\:grid-cols-4 { grid-template-columns: 1fr 3fr; } }
     .card { border: 1px solid #e5e7eb; border-radius: 8px; background: white; }
-    .card-header { padding: 12px 16px; border-bottom: 1px solid #f3f4f6; font-weight: 600; }
+    .card-header { padding: 12px 16px; border-bottom: 1px solid #f3f4f6; }
     .card-content { padding: 16px; }
-    .muted { color:#6b7280; font-size: 14px; }
-    .control { margin-bottom: 16px; }
-    .control label { 
+    .muted { color:#6b7280; }
+    .control { margin-bottom:12px; }
+
+    .rssi-label { 
       display: block; 
-      margin-bottom: 6px; 
-      font-weight: 500;
-      font-size: 14px;
-      color: #374151;
-    }
-    .control input, .control select {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid #d1d5db;
-      border-radius: 6px;
-      font-size: 14px;
-      transition: all 0.2s;
-      background: white;
-    }
-    .control input:focus, .control select:focus {
-      outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
-    }
-    .control input:hover, .control select:hover {
-      border-color: #9ca3af;
-    }
-    .btn { 
-      padding: 8px 16px; 
-      border-radius: 6px; 
-      border: none; 
-      cursor: pointer; 
-      font-weight: 500;
-      transition: all 0.2s;
-    }
-    .btn-primary { 
-      background: #2563eb; 
-      color: white; 
-    }
-    .btn-primary:hover { background: #1d4ed8; }
-    .btn-primary:disabled { 
-      background: #9ca3af; 
-      cursor: not-allowed; 
-    }
-    #heatmapImage { 
-      width: 100%; 
       height: auto; 
-      display: block; 
-      border-radius: 6px;
-      border: 1px solid #e5e7eb;
+      margin-bottom: 8px; 
+      font-size: 14px; 
+      white-space: normal; 
+      overflow: visible;
+      line-height: 1.4;
     }
-    .loading {
-      text-align: center;
-      padding: 40px;
-      color: #6b7280;
+    .rssi-label #minVal, .rssi-label #maxVal { 
+      display: inline-block; 
+      min-width: 30px; 
+      text-align: right; 
+      font-weight: 600; 
     }
-    .spinner {
-      border: 3px solid #f3f4f6;
-      border-top: 3px solid #2563eb;
-      border-radius: 50%;
-      width: 40px;
-      height: 40px;
-      animation: spin 1s linear infinite;
-      margin: 0 auto 16px;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    .info-badge {
-      display: inline-block;
-      padding: 6px 12px;
-      border-radius: 6px;
-      font-size: 13px;
-      font-weight: 500;
-      margin-right: 8px;
-      background: #dbeafe;
-      color: #1e40af;
-    }
-    .settings-section {
-      padding: 20px;
-      background: #f9fafb;
-      border-radius: 8px;
-      margin-bottom: 12px;
-    }
-    .settings-section:last-child {
-      margin-bottom: 0;
-    }
-    .settings-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 12px;
-    }
-    .info-card {
-      background: #f9fafb;
-      padding: 16px;
-      border-radius: 6px;
-      margin-top: 12px;
-    }
-    .layout-grid {
-      display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 20px;
-    }
-    .point-item {
-      border: 1px solid #e5e7eb;
-      border-radius: 6px;
-      margin-bottom: 8px;
-      overflow: hidden;
-    }
-    .point-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 12px;
-      background: #f9fafb;
-      cursor: pointer;
-      user-select: none;
-    }
-    .point-header:hover {
-      background: #f3f4f6;
-    }
-    .point-title {
-      font-weight: 500;
-      font-size: 13px;
-      color: #374151;
-    }
-    .point-controls {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-    .toggle-checkbox {
-      width: 16px;
-      height: 16px;
-      cursor: pointer;
-    }
-    .expand-icon {
-      font-size: 12px;
-      color: #6b7280;
-      transition: transform 0.2s;
-    }
-    .expand-icon.expanded {
-      transform: rotate(90deg);
-    }
-    .point-details {
-      display: none;
-      padding: 12px;
-      background: white;
-      border-top: 1px solid #e5e7eb;
-    }
-    .point-details.show {
-      display: block;
-    }
-    .network-item {
-      padding: 8px 0;
-      border-bottom: 1px solid #f3f4f6;
-      font-size: 12px;
-    }
-    .network-item:last-child {
-      border-bottom: none;
-    }
-    .network-label {
-      color: #6b7280;
-      font-weight: 500;
-      margin-right: 8px;
-    }
-    .network-value {
-      color: #1f2937;
-    }
-    @media (max-width: 1024px) {
-      .layout-grid {
-        grid-template-columns: 1fr;
-      }
-    }
+
+.double-range {
+  width: 100%;
+}
+
+.double-range .range {
+  position: relative;
+  height: 36px;
+  display: flex;
+  align-items: center;
+}
+
+.double-range .range .track-bg,
+.double-range .range .range-track {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  height: 6px;
+  border-radius: 999px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.double-range .range .track-bg {
+  background: #e5e7eb; 
+  z-index: 0;
+  border: 0.5px solid #9ca3af;
+  box-sizing: border-box;
+}
+.double-range .range .range-track {
+  left: 8px;
+  right: auto;
+  width: 0;
+  background: #2563eb; 
+  z-index: 1;
+}
+
+.double-range .range input[type="range"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  pointer-events: none;
+  appearance: none;
+  -webkit-appearance: none;
+  z-index: 3;
+}
+.double-range .range input[type="range"].active {
+  z-index: 4;
+}
+
+.double-range .range input[type="range"]::-webkit-slider-runnable-track {
+  background: transparent;
+  border: none;
+}
+.double-range .range input[type="range"]::-moz-range-track {
+  background: transparent;
+  border: none;
+  height: 6px;
+}
+.double-range .range input[type="range"]::-moz-range-progress {
+  background: transparent;
+}
+.double-range .range input[type="range"]::-ms-track {
+  background: transparent;
+  border-color: transparent;
+  color: transparent;
+}
+.double-range .range input[type="range"]::-ms-fill-lower,
+.double-range .range input[type="range"]::-ms-fill-upper {
+  background: transparent;
+  border: none;
+}
+
   </style>  
 </head>
 <body>
   <div class="container">
-    <h1>WiFi Heatmap Visning</h1>
-    <p class="muted">Visualisering af WiFi-dækning baseret på scipy interpolation</p>
+    <h1>Heatmap Visning</h1>
+    <p class="muted">Visualisering af WiFi-dækning med farveskala</p>
 
-    <div class="layout-grid">
-      <!-- Left sidebar with controls -->
-      <div>
-        <div class="card">
-          <div class="card-header">Heatmap Indstillinger</div>
+    <div class="grid lg:grid-cols-4" style="display:flex; gap:16px;">
+      <div style="width:280px;">
+        <div class="card" style="margin-bottom:12px;"><div class="card-header"><strong>Filtre</strong></div>
           <div class="card-content">
-            
-            <div class="settings-section">
-              <div class="settings-title">Visualiseringsstil</div>
-              <div class="control" style="margin-bottom: 0;">
-                <label for="heatmapStyle">Stil</label>
-                <select id="heatmapStyle">
-                  <option value="contour">Konturer med linjer (anbefalet)</option>
-                  <option value="smooth">Glat gradient</option>
-                </select>
-                <div style="font-size: 11px; color: #9ca3af; margin-top: 4px;">
-                  Konturer: Tydeligere zoner med blå punkter<br>
-                  Glat: Blød overgang med farvede punkter
-                </div>
-              </div>
+            <div class="control" id="apSelectWrap">
+              <label>Vælg AP</label>
+              <div id="apList" style="margin-top:6px; max-height:180px; overflow:auto; border:1px solid #eee; padding:8px; border-radius:4px;"></div>
             </div>
-
-            <div class="settings-section">
-              <div class="settings-title">Signalstyrke Range</div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                <div class="control" style="margin-bottom: 0;">
-                  <label for="vmin">Svagt (rød)</label>
-                  <input id="vmin" type="number" value="-80" step="5" placeholder="-80">
-                  <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">Laveste værdi (dBm)</div>
-                </div>
-                <div class="control" style="margin-bottom: 0;">
-                  <label for="vmax">Stærkt (grøn)</label>
-                  <input id="vmax" type="number" value="-30" step="5" placeholder="-30">
-                  <div style="font-size: 11px; color: #9ca3af; margin-top: 2px;">Højeste værdi (dBm)</div>
-                </div>
-              </div>
-              <div style="font-size: 12px; color: #6b7280; margin-top: 12px; padding: 10px; background: #f9fafb; border-radius: 4px; line-height: 1.5;">
-                <strong>Tip:</strong> Juster værdierne baseret på dine faktiske målinger for bedre nuancer. 
-                Indendørs WiFi ligger typisk mellem -80 og -30 dBm.
-              </div>
-            </div>
-
+            <div class="control"><label>Radius: <span id="radiusVal">80</span>px</label><input id="radius" type="range" min="20" max="200" step="10" value="80" style="width:100%;" /></div>
+            <div class="control"><label>Gennemsigtighed: <span id="opacityVal">70</span>%</label><input id="opacity" type="range" min="10" max="100" step="5" value="70" style="width:100%;" /></div>
+              <div class="control"><label class="rssi-label">Vis kun signalstyrker mellem <span id="minVal">-90</span> dBm og <span id="maxVal">-30</span> dBm</label>
+                 <div class="double-range" style="margin-top:8px;">
+                  <div class="range" id="rangeWrap">
+                    <div class="track-bg"></div>
+                    <div class="range-track" id="rangeTrack"></div>
+                     <input id="minRssi" type="range" min="-100" max="0" step="0.5" value="-90" />
+                     <input id="maxRssi" type="range" min="-100" max="0" step="0.5" value="-30" />
+                   </div>
+                 </div>
+                 <div class="rssi-inputs" style="margin-top:6px; display:flex; gap:8px; align-items:center;">
+                  <label style="font-size:12px;">Min:
+                    <input id="minRssiInput" type="number" step="0.5" min="-100" max="0"
+                            style="width:70px; padding:2px 4px;" />
+                  </label>
+                  <label style="font-size:12px;">Max:
+                    <input id="maxRssiInput" type="number" step="0.5" min="-100" max="0"
+                            style="width:70px; padding:2px 4px;" />
+                  </label>
+                  </div>
+               </div>
           </div>
         </div>
 
-        <div class="card" style="margin-top: 16px;">
-          <div class="card-header">Information</div>
-          <div class="card-content">
-            <div id="infoPanel" style="font-size: 14px; line-height: 1.6;">
-              <div style="margin-bottom: 12px;">
-                <span class="info-badge">
-                  <span id="measurementCount">0</span> målepunkter
-                </span>
-              </div>
-              <div class="muted" style="font-size: 13px;">
-                Minimum 3 målepunkter kræves for at generere et heatmap.
-              </div>
-            </div>
-          </div>
-        </div>
+        <div class="card"><div class="card-header"><strong>Signalstyrke</strong></div><div class="card-content"><div>-35 til -50 dBm: Fremragende</div><div>-51 til -70 dBm: God</div><div>-71 til -85 dBm: Svag</div></div></div>
+      </div>
 
-        <div class="card" style="margin-top: 16px;">
-          <div class="card-header">Om Heatmap</div>
+      <div style="flex:1;">
+        <div class="card"><div class="card-header"><strong>Heatmap</strong></div>
           <div class="card-content">
-            <div style="font-size: 13px; line-height: 1.6; color: #6b7280;">
-              <p>Heatmappet bruger <strong>Radial Basis Function (RBF)</strong> interpolation fra scipy biblioteket.</p>
-              <p style="margin-top: 8px;">Dette giver en videnskabeligt korrekt visualisering af WiFi-signalstyrker.</p>
+            <div id="canvasWrap" style="border-radius:6px; overflow:hidden; border:1px solid #e6e6e6;">
+              <canvas id="heatCanvas" style="display:block;"></canvas>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Main content area -->
-      <div>
-        <div class="card">
-          <div class="card-header">Heatmap Visualisering</div>
-          <div class="card-content">
-            <div id="heatmapContainer">
-              <div class="loading" id="loadingIndicator" style="display: none;">
-                <div class="spinner"></div>
-                <div>Genererer heatmap...</div>
-              </div>
-              <div id="placeholderText" class="muted" style="text-align: center; padding: 60px 20px;">
-                Tilføj målepunkter og vælg indstillinger for at se heatmap
-              </div>
-              <img id="heatmapImage" style="display: none;" alt="WiFi Heatmap">
-              <div id="errorMessage" style="display: none; padding: 20px; background: #fee2e2; color: #991b1b; border-radius: 6px; margin-top: 16px;"></div>
+      <div style="width:420px;">
+        <div class="card"><div class="card-header"><strong>Målinger</strong></div>
+          <div class="card-content" style="max-height:520px; overflow:auto;">
+            <div id="readingList" style="font-size:14px; line-height:1.4;">
+              Ingen målinger endnu
             </div>
           </div>
         </div>
@@ -295,178 +179,552 @@
     (function(){
       let floorPlan = null;
       let measurements = [];
-      let currentProject = null;
-      let isGenerating = false;
-      let regenerateTimeout = null;
-      
-      const heatmapImage = document.getElementById('heatmapImage');
-      const loadingIndicator = document.getElementById('loadingIndicator');
-      const placeholderText = document.getElementById('placeholderText');
-      const errorMessage = document.getElementById('errorMessage');
-      const measurementCount = document.getElementById('measurementCount');
-      const heatmapStyleSelect = document.getElementById('heatmapStyle');
-      const vminInput = document.getElementById('vmin');
-      const vmaxInput = document.getElementById('vmax');
+      let cachedDisplayWidth = null;
+      let cachedDisplayHeight = null;
+      const canvas = document.getElementById('heatCanvas');
+      const apList = document.getElementById('apList');
+  const apSelectWrap = document.getElementById('apSelectWrap');
+  const selectedAPs = new Set();
+  const readingListEl = document.getElementById('readingList');
+  let highlightedMeasurementId = null;
+      const radiusInput = document.getElementById('radius');
+  const opacityInput = document.getElementById('opacity');
+  const radiusVal = document.getElementById('radiusVal');
+  const opacityVal = document.getElementById('opacityVal');
+const minRssi = document.getElementById('minRssi');
+const maxRssi = document.getElementById('maxRssi');
+const minVal  = document.getElementById('minVal');
+const maxVal  = document.getElementById('maxVal');
+const minRssiInput = document.getElementById('minRssiInput');
+const maxRssiInput = document.getElementById('maxRssiInput');
+const rangeTrackEl = document.getElementById('rangeTrack');
+const rangeWrap    = document.getElementById('rangeWrap');
 
-      function updateUI() {
-        const count = measurements.length;
-        measurementCount.textContent = count;
-      }
 
-      // Auto-regenerate heatmap when settings change
-      function scheduleRegenerate() {
-        if (measurements.length < 3 || !floorPlan || !currentProject) {
-          return;
-        }
-        
-        // Clear existing timeout
-        if (regenerateTimeout) {
-          clearTimeout(regenerateTimeout);
-        }
-        
-        // Schedule regeneration after a short delay
-        regenerateTimeout = setTimeout(() => {
-          console.log('[Heatmap] Settings changed, regenerating...');
-          generateHeatmap();
-        }, 300);
-      }
+function updateRangeTrack() {
+  if (!rangeTrackEl || !minRssi || !maxRssi || !rangeWrap) return;
+  const min = parseFloat(minRssi.min);
+  const max = parseFloat(minRssi.max);
+  const v1  = parseFloat(minRssi.value);
+  const v2  = parseFloat(maxRssi.value);
+  const rect = rangeWrap.getBoundingClientRect();
+  const width = rect.width || 1;
+  const p1 = (v1 - min) / (max - min);
+  const p2 = (v2 - min) / (max - min);
+  const padding = 8;
+  const trackWidth = width - padding * 2;
+  rangeTrackEl.style.left  = (padding + p1 * trackWidth) + 'px';
+  rangeTrackEl.style.width = Math.max(0, (p2 - p1) * trackWidth) + 'px';
+}
 
-      async function generateHeatmap() {
-        if (isGenerating) {
-          console.log('[Heatmap] Already generating, skipping...');
-          return;
-        }
-        
-        console.log('[Heatmap] generateHeatmap called');
-        console.log('[Heatmap] floorPlan:', floorPlan);
-        console.log('[Heatmap] measurements:', measurements);
-        console.log('[Heatmap] currentProject:', currentProject);
-        
-        if (!floorPlan || measurements.length < 3) {
-          showError('Behov for et floor plan og mindst 3 målepunkter');
-          return;
-        }
+// Make sure min <= max and update labels + blue bar
+function clampRangeInputs() {
+  const step = parseFloat(minRssi.step) || 1;
+  let vMin = parseFloat(minRssi.value);
+  let vMax = parseFloat(maxRssi.value);
 
-        if (!currentProject || !currentProject.id) {
-          showError('Behov for et gyldigt projekt');
-          return;
-        }
+  if (vMin >= vMax - step/2) {
+    vMin = Math.max(parseFloat(minRssi.min), vMax - step);
+    minRssi.value = vMin;
+  }
+  if (vMax <= vMin + step/2) {
+    vMax = Math.min(parseFloat(maxRssi.max), vMin + step);
+    maxRssi.value = vMax;
+  }
 
-        // Hide previous content
-        isGenerating = true;
-        heatmapImage.style.display = 'none';
-        placeholderText.style.display = 'none';
-        errorMessage.style.display = 'none';
-        loadingIndicator.style.display = 'block';
+  minVal.textContent = minRssi.value;
+  maxVal.textContent = maxRssi.value;
 
-        const requestBody = {
-          floorPlanId: currentProject.id,
-          measurements: measurements,
-          options: {
-            metric: 'rssi',
-            colormap: 'RdYlGn',
-            style: heatmapStyleSelect.value,
-            vmin: parseFloat(vminInput.value),
-            vmax: parseFloat(vmaxInput.value)
+    // keep number inputs in sync
+  if (minRssiInput) minRssiInput.value = minRssi.value;
+  if (maxRssiInput) maxRssiInput.value = maxRssi.value;
+
+  updateRangeTrack();
+}
+
+// When user clicks on the bar, choose the closest thumb to move
+rangeWrap.addEventListener('pointerdown', (ev) => {
+  const rect = rangeWrap.getBoundingClientRect();
+  const relX = (ev.clientX - rect.left) / rect.width;
+  const min = parseFloat(minRssi.min);
+  const max = parseFloat(minRssi.max);
+  const valAtPointer = min + relX * (max - min);
+  const dMin = Math.abs(valAtPointer - parseFloat(minRssi.value));
+  const dMax = Math.abs(valAtPointer - parseFloat(maxRssi.value));
+
+  const target = dMin <= dMax ? minRssi : maxRssi;
+  minRssi.classList.remove('active');
+  maxRssi.classList.remove('active');
+  target.classList.add('active');
+});
+
+// Drag behaviour for each thumb
+[minRssi, maxRssi].forEach(inp => {
+  if (!inp) return;
+
+  inp.addEventListener('pointerdown', (ev) => {
+    minRssi.classList.remove('active');
+    maxRssi.classList.remove('active');
+    inp.classList.add('active');
+    if (inp.setPointerCapture) inp.setPointerCapture(ev.pointerId);
+  });
+
+  inp.addEventListener('pointerup', (ev) => {
+    inp.classList.remove('active');
+    if (inp.releasePointerCapture) inp.releasePointerCapture(ev.pointerId);
+  });
+
+  inp.addEventListener('pointercancel', () => inp.classList.remove('active'));
+
+  // Clamp + redraw when values change
+  inp.addEventListener('input', () => {
+    clampRangeInputs();
+    draw();
+  });
+});
+// Sync values when user types in the number fields
+if (minRssiInput && maxRssiInput) {
+  const syncFromTextInputs = () => {
+    let vMin = parseFloat(minRssiInput.value);
+    let vMax = parseFloat(maxRssiInput.value);
+
+    // fallback to current slider values if empty / NaN
+    if (isNaN(vMin)) vMin = parseFloat(minRssi.value);
+    if (isNaN(vMax)) vMax = parseFloat(maxRssi.value);
+
+    // clamp to slider min/max
+    const minBound = parseFloat(minRssi.min);
+    const maxBound = parseFloat(minRssi.max);
+
+    // Force negatives: interpret positive input as negative of that magnitude
+    if (vMin > 0) vMin = -vMin;
+    if (vMax > 0) vMax = -vMax;
+
+    vMin = Math.max(minBound, Math.min(maxBound, vMin));
+    vMax = Math.max(minBound, Math.min(maxBound, vMax));
+
+    minRssi.value = vMin;
+    maxRssi.value = vMax;
+
+    clampRangeInputs();
+    draw();
+  };
+
+  // update on change (blur/Enter); use 'input' instead for live typing
+  minRssiInput.addEventListener('change', syncFromTextInputs);
+  maxRssiInput.addEventListener('change', syncFromTextInputs);
+}
+
+  // Clear active state on global release
+  document.addEventListener('pointerup', () => { minRssi.classList.remove('active'); maxRssi.classList.remove('active'); });
+
+  // Initial setup
+  clampRangeInputs();
+  window.addEventListener('resize', updateRangeTrack);
+
+      function getAccessPoints() {
+        // Build a deduplicated list of access points keyed by SSID when available,
+        // otherwise fall back to BSSID. We return a representative bssid for each ssid.
+        const map = new Map();
+        measurements.forEach(m => {
+          const b = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || null;
+          const s = (m.ssid || (m.readings && m.readings[0] && m.readings[0].ssid) || '').trim();
+          const key = s || b || null;
+          if (!key) return;
+          if (!map.has(key)) {
+            map.set(key, { key, ssid: s || null, bssid: b || null, count: 1 });
+          } else {
+            const entry = map.get(key);
+            entry.count = (entry.count || 0) + 1;
           }
-        };
-        
-        console.log('[Heatmap] Sending request to backend:', requestBody);
+        });
+        return Array.from(map.values());
+      }
 
-        try {
-          const response = await fetch('http://localhost:4000/api/heatmap/generate', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(requestBody)
+      function getColorForSignal(strength) {
+        const normalized = Math.max(0, Math.min(1, (strength + 85) / 50));
+        if (normalized < 0.5) {
+          const factor = normalized * 2;
+          return `rgba(255, ${Math.floor(255 * factor)}, 0, 1)`;
+        } else {
+          const factor = (normalized - 0.5) * 2;
+          return `rgba(${Math.floor(255 * (1 - factor))}, 255, 0, 1)`;
+        }
+      }
+
+  function draw() {
+        if (!floorPlan) {
+          canvas.width = 800; canvas.height = 400; const ctx=canvas.getContext('2d'); ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#f8fafc'; ctx.fillRect(0,0,canvas.width,canvas.height); ctx.fillStyle='#9ca3af'; ctx.fillText('Upload en plantegning og tilføj målepunkter først',20,20); return; }
+        const ctx = canvas.getContext('2d');
+        const img = new Image();
+        img.onload = () => {
+          // Use natural image dimensions to ensure consistency
+          const originalWidth = floorPlan.width || img.naturalWidth;
+          const originalHeight = floorPlan.height || img.naturalHeight;
+          
+          // Calculate display dimensions only once, then cache them
+          if (cachedDisplayWidth === null || cachedDisplayHeight === null) {
+            const canvasWrap = document.getElementById('canvasWrap');
+            const containerWidth = canvasWrap.offsetWidth;
+            const scale = containerWidth / originalWidth;
+            cachedDisplayWidth = containerWidth;
+            cachedDisplayHeight = originalHeight * scale;
+          }
+          
+          const displayWidth = cachedDisplayWidth;
+          const displayHeight = cachedDisplayHeight;
+          
+          // Set canvas to display size (not original size)
+          canvas.width = displayWidth;
+          canvas.height = displayHeight;
+          
+          ctx.drawImage(img, 0, 0, displayWidth, displayHeight);
+          // RSSI filtering bounds (min <= signal <= max)
+          const minFilter = parseFloat(minRssi.value);
+          const maxFilter = parseFloat(maxRssi.value);
+
+          // Helper to compute the same key used by the AP list (SSID or BSSID)
+          const getKeyForMeasurement = (m) => {
+            const b = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || null;
+            const s = (m.ssid || (m.readings && m.readings[0] && m.readings[0].ssid) || '').trim();
+            return s || b || null;
+          };
+
+          // Build base set filtered by selected checkboxes in the UI (read live)
+          const checkedInputs = Array.from(apList.querySelectorAll('input[type=checkbox][data-key]'))
+            .filter(i => i.checked)
+            .map(i => i.dataset.key);
+          const uiSet = new Set(checkedInputs);
+          const base = measurements.filter(m => {
+            const key = getKeyForMeasurement(m);
+            return key && uiSet.has(key);
+          });
+
+          const filtered = base.filter(m => {
+            const sig = (typeof m.signalStrength === 'number') ? m.signalStrength : (typeof m.rssi === 'number' ? m.rssi : (m.readings && m.readings[0] && (m.readings[0].rssi || m.readings[0].signal_level)) || null);
+            if (sig === null) return false;
+            return sig >= minFilter && sig <= maxFilter;
           });
           
-          console.log('[Heatmap] Response status:', response.status);
-          console.log('[Heatmap] Response ok:', response.ok);
-
-          if (!response.ok) {
-            const errorText = await response.text();
-            console.error('[Heatmap] Error response:', errorText);
-            let error;
-            try {
-              error = JSON.parse(errorText);
-            } catch (e) {
-              error = { error: errorText };
-            }
-            throw new Error(error.error || 'Failed to generate heatmap');
-          }
-
-          const result = await response.json();
-          console.log('[Heatmap] Success result:', result);
+          // Create heatmap using density-based approach with signal strength weighting
+          // Step 1: Create off-screen canvas for accumulation
+          const heatCanvas = document.createElement('canvas');
+          heatCanvas.width = displayWidth;
+          heatCanvas.height = displayHeight;
+          const heatCtx = heatCanvas.getContext('2d');
           
-          if (result.imageData) {
-            heatmapImage.src = result.imageData;
-            heatmapImage.style.display = 'block';
-            loadingIndicator.style.display = 'none';
-          } else {
-            throw new Error('No image data received');
+          // Step 2: Accumulate signal influence from each measurement point
+          const rad = parseInt(radiusInput.value,10);
+          
+          filtered.forEach(m => {
+            const displayX = (m.x / originalWidth) * displayWidth;
+            const displayY = (m.y / originalHeight) * displayHeight;
+            const sig = (typeof m.signalStrength === 'number') ? m.signalStrength : (typeof m.rssi === 'number' ? m.rssi : (m.readings && m.readings[0] && (m.readings[0].rssi || m.readings[0].signal_level)) || null);
+            
+            // Normalize signal strength to 0-1 range
+            // -30 dBm = excellent (1.0), -90 dBm = poor (0.0)
+            const signalNormalized = Math.max(0, Math.min(1, (sig + 90) / 60));
+            
+            // Create radial gradient for this measurement
+            const grad = heatCtx.createRadialGradient(displayX, displayY, 0, displayX, displayY, rad);
+            
+            // Map signal strength to colors with higher saturation and contrast:
+            // Strong signal (>0.7): Bright Green
+            // Medium signal (0.4-0.7): Bright Yellow/Orange
+            // Weak signal (<0.4): Bright Red
+            let centerColor, edgeColor;
+            
+            if (signalNormalized > 0.7) {
+              // Strong signal - vibrant green gradient with full opacity
+              centerColor = `rgba(16, 185, 129, 1)`;
+              edgeColor = `rgba(16, 185, 129, 0)`;
+            } else if (signalNormalized > 0.4) {
+              // Medium signal - vibrant yellow/orange gradient with full opacity
+              centerColor = `rgba(245, 158, 11, 1)`;
+              edgeColor = `rgba(245, 158, 11, 0)`;
+            } else {
+              // Weak signal - vibrant red gradient with high opacity
+              centerColor = `rgba(220, 38, 38, 0.95)`;
+              edgeColor = `rgba(220, 38, 38, 0)`;
+            }
+            
+            grad.addColorStop(0, centerColor);
+            grad.addColorStop(1, edgeColor);
+            
+            heatCtx.fillStyle = grad;
+            heatCtx.fillRect(displayX - rad, displayY - rad, rad*2, rad*2);
+          });
+          
+          // Step 3: Apply accumulated heatmap with stronger visibility
+          ctx.save();
+          ctx.globalAlpha = parseFloat(opacityInput.value)/100;
+          ctx.globalCompositeOperation = 'source-over';
+          ctx.drawImage(heatCanvas, 0, 0);
+          ctx.restore();
+          
+          ctx.globalAlpha = 1;
+          filtered.forEach(m => { 
+            const displayX = (m.x / originalWidth) * displayWidth;
+            const displayY = (m.y / originalHeight) * displayHeight;
+            
+            // Draw highlight ring if this measurement is highlighted
+            if (highlightedMeasurementId !== null && m.id === highlightedMeasurementId) {
+              ctx.beginPath();
+              ctx.arc(displayX, displayY, 16, 0, Math.PI*2);
+              ctx.strokeStyle = 'rgba(30, 58, 138, 0.9)';
+              ctx.lineWidth = 3;
+              ctx.stroke();
+              
+              ctx.beginPath();
+              ctx.arc(displayX, displayY, 20, 0, Math.PI*2);
+              ctx.strokeStyle = 'rgba(30, 58, 138, 0.45)';
+              ctx.lineWidth = 2;
+              ctx.stroke();
+            }
+            
+            ctx.beginPath(); 
+            ctx.arc(displayX, displayY, 4, 0, Math.PI*2); 
+            ctx.fillStyle='white'; 
+            ctx.fill(); 
+            ctx.strokeStyle='rgba(0,0,0,0.5)'; 
+            ctx.lineWidth=2; 
+            ctx.stroke(); 
+          });
+
+          // Update right-side readings list from the same filtered array
+          if (readingListEl) {
+            readingListEl.innerHTML = '';
+            if (!filtered || filtered.length === 0) {
+              readingListEl.textContent = 'Ingen målinger matcher filtrene';
+            } else {
+              filtered.forEach(m => {
+                const sig = (typeof m.signalStrength === 'number') ? m.signalStrength : (m.readings && m.readings[0] && (m.readings[0].rssi || m.readings[0].signal_level)) || null;
+                const ssid = m.ssid || (m.readings && m.readings[0] && m.readings[0].ssid) || '';
+                const bssid = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || '';
+                const freq = (m.frequency || (m.readings && m.readings[0] && m.readings[0].frequency)) || null;
+                const channel = (m.channel || (m.readings && m.readings[0] && m.readings[0].channel)) || null;
+                const ts = m.timestamp ? (new Date(m.timestamp)).toLocaleString() : (m.createdAt ? (new Date(m.createdAt)).toLocaleString() : '');
+                
+                // Debug: log one measurement to see actual data structure
+                if (window.debugMeasurement !== true) {
+                  console.log('Sample measurement data:', m);
+                  window.debugMeasurement = true;
+                }
+
+                const row = document.createElement('div');
+                row.style.padding = '10px';
+                row.style.borderBottom = '1px solid #f3f4f6';
+                row.style.display = 'flex';
+                row.style.gap = '10px';
+                row.style.alignItems = 'center';
+
+                // Color dot based on signal
+                const dot = document.createElement('div');
+                dot.style.width = '14px';
+                dot.style.height = '14px';
+                dot.style.borderRadius = '50%';
+                dot.style.flex = '0 0 14px';
+                const color = (typeof getColorForSignal === 'function' && sig !== null) ? getColorForSignal(sig) : 'rgba(156,163,175,1)';
+                dot.style.background = color;
+                dot.style.boxShadow = '0 0 4px rgba(0,0,0,0.08)';
+
+                const content = document.createElement('div');
+                content.style.flex = '1 1 auto';
+
+                const title = document.createElement('div');
+                title.style.fontWeight = '700';
+                title.style.marginBottom = '3px';
+                title.textContent = ssid || bssid || ('MP ' + (m.id || '?'));
+
+                const details = document.createElement('div');
+                details.style.fontSize = '12px';
+                details.style.color = '#6b7280';
+                details.style.display = 'flex';
+                details.style.flexWrap = 'wrap';
+                details.style.gap = '8px';
+
+                const idBadge = document.createElement('span');
+                idBadge.textContent = `MP #${m.id || '?'}`;
+                idBadge.style.background = 'rgba(34, 197, 94, 0.15)';
+                idBadge.style.color = 'rgba(21, 128, 61, 1)';
+                idBadge.style.padding = '2px 6px';
+                idBadge.style.borderRadius = '999px';
+                idBadge.style.fontSize = '11px';
+
+                const parentBadge = document.createElement('span');
+                if (m.parentId) {
+                  parentBadge.textContent = `parent #${m.parentId}`;
+                  parentBadge.style.background = '#fff7ed';
+                  parentBadge.style.color = '#92400e';
+                  parentBadge.style.padding = '2px 6px';
+                  parentBadge.style.borderRadius = '999px';
+                  parentBadge.style.fontSize = '11px';
+                }
+
+                const rssiSpan = document.createElement('span');
+                rssiSpan.textContent = `RSSI: ${sig !== null ? sig + ' dBm' : 'N/A'}`;
+
+                const coordSpan = document.createElement('span');
+                coordSpan.textContent = `x:${Math.round(m.x)}, y:${Math.round(m.y)}`;
+
+                const bssidSpan = document.createElement('span');
+                bssidSpan.textContent = bssid ? `${bssid}` : '';
+                bssidSpan.style.opacity = bssid ? '1' : '0.6';
+                bssidSpan.style.fontSize = '12px';
+
+                const freqSpan = document.createElement('span');
+                if (freq) {
+                  const freqGHz = freq >= 5000 ? `${(freq/1000).toFixed(1)} GHz` : `${(freq/1000).toFixed(1)} GHz`;
+                  freqSpan.textContent = freqGHz;
+                }
+
+                const channelSpan = document.createElement('span');
+                if (channel) channelSpan.textContent = `Ch ${channel}`;
+
+                const tsSpan = document.createElement('span');
+                tsSpan.textContent = ts;
+                tsSpan.style.marginLeft = 'auto';
+                tsSpan.style.fontSize = '11px';
+                tsSpan.style.color = '#9ca3af';
+
+                // Compose details
+                details.appendChild(idBadge);
+                if (m.parentId) details.appendChild(parentBadge);
+                details.appendChild(rssiSpan);
+                details.appendChild(coordSpan);
+                if (freq) details.appendChild(freqSpan);
+                if (channel) details.appendChild(channelSpan);
+                if (bssid) details.appendChild(bssidSpan);
+
+                content.appendChild(title);
+                content.appendChild(details);
+
+                row.appendChild(dot);
+                row.appendChild(content);
+                row.appendChild(tsSpan);
+
+                // Hover and click affordances
+                row.addEventListener('mouseenter', () => { 
+                  row.style.background = '#f8fafc'; 
+                  highlightedMeasurementId = m.id;
+                  draw();
+                });
+                row.addEventListener('mouseleave', () => { 
+                  row.style.background = 'transparent'; 
+                  highlightedMeasurementId = null;
+                  draw();
+                });
+                row.style.cursor = 'pointer';
+                row.addEventListener('click', () => {
+                  // Toggle highlight on click for persistent selection
+                  if (highlightedMeasurementId === m.id) {
+                    highlightedMeasurementId = null;
+                  } else {
+                    highlightedMeasurementId = m.id;
+                  }
+                  draw();
+                  // Post a message so parent app or other iframes can react
+                  if (window.parent && window.parent.postMessage) {
+                    window.parent.postMessage({ type: 'heatmap:selectMeasurement', measurementId: m.id }, '*');
+                  }
+                });
+
+                readingListEl.appendChild(row);
+              });
+            }
           }
+        };
+        img.src = floorPlan.imageUrl;
+      }
 
-        } catch (error) {
-          console.error('Heatmap generation error:', error);
-          showError('Kunne ikke generere heatmap: ' + error.message);
-          loadingIndicator.style.display = 'none';
-          placeholderText.style.display = 'block';
-        } finally {
-          isGenerating = false;
+      function rebuildAPList() {
+        const aps = getAccessPoints();
+        apList.innerHTML = '';
+        selectedAPs.clear();
+        if (!aps || aps.length === 0) {
+          apList.textContent = 'Ingen adgangspunkter fundet';
+          return;
         }
+
+        // Map to keep input references by BSSID
+        const inputsByBssid = new Map();
+
+        // Select all checkbox
+        const allLabel = document.createElement('label');
+        allLabel.style.display = 'block';
+        allLabel.style.marginBottom = '8px';
+        const allInput = document.createElement('input');
+  allInput.type = 'checkbox';
+  allInput.checked = true;
+        allInput.style.marginRight = '6px';
+        allLabel.appendChild(allInput);
+        allLabel.appendChild(document.createTextNode('Vælg alle'));
+        apList.appendChild(allLabel);
+
+        allInput.addEventListener('change', () => {
+          const checked = allInput.checked;
+          inputsByBssid.forEach((inp, b) => {
+            inp.checked = checked;
+            if (checked) selectedAPs.add(b); else selectedAPs.delete(b);
+          });
+          draw();
+        });
+
+        aps.forEach(ap => {
+          const label = document.createElement('label');
+          label.style.display = 'block';
+          label.style.marginBottom = '6px';
+          const input = document.createElement('input');
+          input.type = 'checkbox';
+          // Use the dedupe key (SSID or BSSID) as dataset key
+          input.dataset.key = ap.key;
+          input.checked = true;
+          input.style.marginRight = '6px';
+          label.appendChild(input);
+          const labelText = ap.ssid ? `${ap.ssid} (${(ap.bssid||'').slice(0,8)})` : (ap.bssid || ap.key);
+          label.appendChild(document.createTextNode(labelText + (ap.count && ap.count>1 ? ` — ${ap.count}` : '')));
+          apList.appendChild(label);
+          inputsByBssid.set(ap.key, input);
+          selectedAPs.add(ap.key);
+
+          input.addEventListener('change', () => {
+            if (input.checked) selectedAPs.add(ap.key); else selectedAPs.delete(ap.key);
+            // update allInput checked state
+            const allChecked = Array.from(inputsByBssid.values()).every(i => i.checked);
+            allInput.checked = allChecked;
+            draw();
+          });
+        });
       }
 
-      function showError(message) {
-        errorMessage.textContent = message;
-        errorMessage.style.display = 'block';
-        setTimeout(() => {
-          errorMessage.style.display = 'none';
-        }, 5000);
-      }
+      radiusInput.addEventListener('input', ()=>{ radiusVal.textContent=radiusInput.value; draw(); });
+      opacityInput.addEventListener('input', ()=>{ opacityVal.textContent=opacityInput.value; draw(); });
+  // initialize track
+  clampRangeInputs();
 
-      // Add event listeners for auto-regeneration on settings change
-      heatmapStyleSelect.addEventListener('change', scheduleRegenerate);
-      vminInput.addEventListener('blur', scheduleRegenerate);
-      vminInput.addEventListener('change', scheduleRegenerate);
-      vmaxInput.addEventListener('blur', scheduleRegenerate);
-      vmaxInput.addEventListener('change', scheduleRegenerate);
-
-      // Listen for messages from parent
-      window.addEventListener('message', function(ev) {
+      window.addEventListener('message', function(ev){
         try {
           const msg = ev.data || {};
           if (msg.type === 'heatmap:set') {
             measurements = Array.isArray(msg.measurements) ? msg.measurements : [];
-            currentProject = msg.project || null;
-            updateUI();
-            // Auto-generate heatmap when data is loaded and we have enough measurements
-            if (measurements.length >= 3 && currentProject && floorPlan) {
-              console.log('[Heatmap] Auto-generating heatmap with', measurements.length, 'measurements');
-              setTimeout(() => generateHeatmap(), 500); // Small delay to ensure UI is ready
-            }
+            rebuildAPList(); draw();
           }
           if (msg.type === 'heatmap:setFloorPlan') {
-            floorPlan = msg.floorPlan || null;
-            updateUI();
-            // Auto-generate if we already have measurements
-            if (measurements.length >= 3 && currentProject && floorPlan) {
-              console.log('[Heatmap] Auto-generating heatmap after floor plan loaded');
-              setTimeout(() => generateHeatmap(), 500);
-            }
+            floorPlan = msg.floorPlan || null; 
+            // Reset cached dimensions when new floor plan is loaded
+            cachedDisplayWidth = null;
+            cachedDisplayHeight = null;
+            // when floor image or measurements change, keep the dual-range track correct
+            setTimeout(updateRangeTrack,0);
+            draw();
           }
-        } catch (err) {
-          console.error('Message handling error:', err);
-        }
-      });
+        } catch (err) {}
+      }, false);
 
-      // Signal ready
-      if (window.parent && window.parent !== window) {
+      if (window.parent && typeof window.parent.postMessage === 'function') {
         window.parent.postMessage({ type: 'heatmap:ready' }, '*');
       }
 
-      updateUI();
     })();
   </script>
 </body>

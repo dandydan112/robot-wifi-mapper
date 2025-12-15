@@ -22,13 +22,15 @@ class WiFiCoverageApp {
   // Load projects from database with full data
   async loadProjects() {
     try {
-      const floorPlans = await window.dbAPI.getAllProjects();
-
-      const enriched = await Promise.all((floorPlans || []).map(fp => this.loadCompleteProjectData(fp)));
-      this.projects = enriched;
-
+      const basicProjects = await window.dbAPI.getAllProjects();
+      
+      // For each project, load complete data
+      this.projects = await Promise.all(basicProjects.map(async (project) => {
+        return await this.loadCompleteProjectData(project);
+      }));
+      
       this.updateUI();
-      this.sendDataToIframes();
+      this.sendDataToIframes(); // Send updated projects to dashboard
     } catch (err) {
       console.error('Error loading projects from database:', err);
       this.showNotification('Fejl ved indlæsning af projekter fra database. Kontroller at backend kører.', 'error');
@@ -172,12 +174,6 @@ class WiFiCoverageApp {
     }
     
     this.updateUI();
-    
-    // Re-send data to the newly active view to ensure it's up to date
-    // Small delay to ensure iframe is ready
-    setTimeout(() => {
-      this.sendDataToIframes();
-    }, 100);
   }
 
   updateUI() {
@@ -256,14 +252,12 @@ class WiFiCoverageApp {
     // Send floor plan to upload iframe
     if (this.iframes.upload && this.iframes.upload.contentWindow) {
       try {
-        const fpToSend = this.currentProject?.floorPlan || null;
-        console.log('[Main] Sending floor plan to upload iframe:', fpToSend);
         this.iframes.upload.contentWindow.postMessage({
           type: 'upload:setFloorPlan',
-          floorPlan: fpToSend
+          floorPlan: this.currentProject?.floorPlan || null
         }, '*');
       } catch (err) {
-        console.error('[Main] Error sending to upload iframe:', err);
+        // ignore
       }
     }
 
@@ -286,28 +280,16 @@ class WiFiCoverageApp {
     // Send data to heatmap iframe
     if (this.iframes.heatmap && this.iframes.heatmap.contentWindow) {
       try {
-        const fpData = this.currentProject?.floorPlan || null;
-        console.log('[Main] Sending floor plan to heatmap iframe:', fpData);
-        console.log('[Main] Current project:', this.currentProject);
-        
-        // Always send floor plan first, then measurements
         this.iframes.heatmap.contentWindow.postMessage({
           type: 'heatmap:setFloorPlan',
-          floorPlan: fpData
+          floorPlan: this.currentProject?.floorPlan || null
         }, '*');
-        
-        // Small delay to ensure floor plan is processed first
-        setTimeout(() => {
-          if (this.iframes.heatmap && this.iframes.heatmap.contentWindow) {
-            this.iframes.heatmap.contentWindow.postMessage({
-              type: 'heatmap:set',
-              measurements: this.currentProject?.measurements || [],
-              project: this.currentProject
-            }, '*');
-          }
-        }, 100);
+        this.iframes.heatmap.contentWindow.postMessage({
+          type: 'heatmap:set',
+          measurements: this.currentProject?.measurements || []
+        }, '*');
       } catch (err) {
-        console.error('[Main] Error sending to heatmap iframe:', err);
+        // ignore
       }
     }
 
@@ -403,29 +385,7 @@ class WiFiCoverageApp {
 
     // Heatmap events
     if (data.type === 'heatmap:ready') {
-      console.log('[Main] Heatmap iframe is ready, sending data');
-      // Delay to ensure iframe is fully initialized
-      setTimeout(() => {
-        if (this.iframes.heatmap && this.iframes.heatmap.contentWindow) {
-          const fpData = this.currentProject?.floorPlan || null;
-          console.log('[Main] Sending floor plan to ready heatmap:', fpData);
-          
-          this.iframes.heatmap.contentWindow.postMessage({
-            type: 'heatmap:setFloorPlan',
-            floorPlan: fpData
-          }, '*');
-          
-          setTimeout(() => {
-            if (this.iframes.heatmap && this.iframes.heatmap.contentWindow) {
-                this.iframes.heatmap.contentWindow.postMessage({
-                type: 'heatmap:set',
-                measurements: this.currentProject?.measurements || [],
-                project: this.currentProject
-              }, '*');
-            }
-          }, 50);
-        }
-      }, 100);
+      this.sendDataToIframes();
     }
 
     // Report events
@@ -485,7 +445,6 @@ class WiFiCoverageApp {
     try {
       const freshProject = await this.loadCompleteProjectData(project);
       this.currentProject = freshProject;
-      this.projects = this.projects.map(p => p.id === freshProject.id ? freshProject : p);
       
       console.log('Fresh project data loaded:', freshProject);
       
@@ -672,7 +631,7 @@ class WiFiCoverageApp {
     const updatedProject = {
       ...this.currentProject,
       measurements: (this.currentProject.measurements || []).map(m => m.id === id ? measurement : m),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date()
     };
     
     this.currentProject = updatedProject;
@@ -687,7 +646,7 @@ class WiFiCoverageApp {
     const updatedProject = {
       ...this.currentProject,
       measurements: (this.currentProject.measurements || []).filter(m => m.id !== id),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date()
     };
     
     this.currentProject = updatedProject;
@@ -699,10 +658,13 @@ class WiFiCoverageApp {
     if (!this.currentProject) return;
     
     try {
+      // Mark project as completed when report is saved
+      await window.dbAPI.updateProjectStatus(this.currentProject.id, 'completed');
+      
       const updatedProject = {
         ...this.currentProject,
         status: 'completed',
-        updatedAt: new Date().toISOString()
+        updatedAt: new Date()
       };
       
       this.currentProject = updatedProject;
@@ -717,21 +679,14 @@ class WiFiCoverageApp {
   }
 
   buildFloorPlanObject(source) {
-    if (!source) {
-      console.warn('[Main] buildFloorPlanObject: source is null/undefined');
-      return null;
-    }
+    if (!source) return null;
     console.log('[Main] buildFloorPlanObject source:', source);
     console.log('[Main] buildFloorPlanObject source keys:', Object.keys(source));
     const imagePath = source.imagePath || source.imageUrl || null;
     console.log('[Main] buildFloorPlanObject imagePath:', imagePath);
     console.log('[Main] buildFloorPlanObject source.imagePath:', source.imagePath);
     console.log('[Main] buildFloorPlanObject source.imageUrl:', source.imageUrl);
-    if (!imagePath) {
-      console.warn('[Main] buildFloorPlanObject: No imagePath found, returning null');
-      console.warn('[Main] Available fields in source:', Object.keys(source));
-      return null;
-    }
+    if (!imagePath) return null;
 
     const referencePoints = Array.isArray(source.referencePoints)
       ? source.referencePoints
@@ -751,27 +706,24 @@ class WiFiCoverageApp {
     };
 
     if (scaleFactor) {
-      floorPlan.scale = { pixelsPerMeter: scaleFactor, referencePoints };
+      floorPlan.scale = {
+        pixelsPerMeter: scaleFactor,
+        referencePoints
+      };
     }
 
     return floorPlan;
   }
 
   determineProjectStatus(floorPlan, measurements, baseStatus) {
-    if (baseStatus && typeof baseStatus === 'string') {
-      return baseStatus;
-    }
+    if (baseStatus && typeof baseStatus === 'string') return baseStatus;
 
     if (floorPlan && measurements && measurements.length > 0) {
-      const completedMeasurements = measurements.filter(m => m.signalStrength !== null);
-      if (completedMeasurements.length >= 3) {
-        return 'measuring';
-      }
-      return 'calibrated';
+      return 'in-progress';
     }
 
     if (floorPlan) {
-      return 'calibrated';
+      return 'draft';
     }
 
     return 'draft';
