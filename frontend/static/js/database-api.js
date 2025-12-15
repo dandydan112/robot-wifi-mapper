@@ -26,83 +26,70 @@ class DatabaseAPI {
     }
   }
 
-  // Projekter
-  async createProject(name, description) {
-    return this.request('/projects', {
+  async createProject(project) {
+    const payload = {
+      name: project?.name,
+      building: project?.building || null,
+      description: project?.description || null
+    };
+    return this.request('/floor-plans', {
       method: 'POST',
-      body: JSON.stringify({ name, description })
+      body: JSON.stringify(payload)
     });
   }
 
   async getAllProjects() {
-    return this.request('/projects');
+    return this.request('/floor-plans');
   }
 
   async getProject(id) {
-    return this.request(`/projects/${id}`);
+    return this.request(`/floor-plans/${id}`);
   }
 
-  async updateProject(id, name, description) {
-    return this.request(`/projects/${id}`, {
+  async updateProject(id, updates) {
+    return this.request(`/floor-plans/${id}`, {
       method: 'PUT',
-      body: JSON.stringify({ name, description })
+      body: JSON.stringify(updates)
     });
   }
 
   async updateProjectStatus(id, status) {
-    return this.request(`/projects/${id}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status })
-    });
+    return this.updateProject(id, { status });
   }
 
   async deleteProject(id) {
-    return this.request(`/projects/${id}`, {
+    return this.request(`/floor-plans/${id}`, {
       method: 'DELETE'
     });
   }
 
-  // Målinger
-  async addMeasurement(projectId, measurement) {
-    return this.request(`/projects/${projectId}/measurements`, {
-      method: 'POST',
-      body: JSON.stringify(measurement)
+  async getMeasurementPoints(floorPlanId) {
+    const endpoint = floorPlanId !== undefined && floorPlanId !== null
+      ? `/measurement-points?floorPlanId=${encodeURIComponent(floorPlanId)}`
+      : '/measurement-points';
+    return this.request(endpoint);
+  }
+
+  async deleteMeasurementPoint(id) {
+    return this.request(`/measurement-points/${encodeURIComponent(id)}`, {
+      method: 'DELETE'
     });
   }
 
-  async getMeasurements(projectId) {
-    return this.request(`/projects/${projectId}/measurements`);
-  }
-
-  // Kalibrering
-  async saveCalibration(projectId, floorPlanImage, scaleFactor, referencePoints) {
-    return this.request(`/projects/${projectId}/calibration`, {
-      method: 'POST',
-      body: JSON.stringify({
-        floorPlanImage,
-        scaleFactor,
-        referencePoints
-      })
+  async updateFloorPlanDetails(floorPlanId, details) {
+    return this.request(`/floor-plans/${floorPlanId}`, {
+      method: 'PUT',
+      body: JSON.stringify(details)
     });
   }
 
-  async getCalibration(projectId) {
-    return this.request(`/projects/${projectId}/calibration`);
-  }
-
-  // Rapporter
-  async saveReport(projectId, reportType, reportData) {
-    return this.request(`/projects/${projectId}/reports`, {
-      method: 'POST',
-      body: JSON.stringify({ reportType, reportData })
+  async saveCalibration(floorPlanId, imagePath, referencePoints) {
+    return this.updateFloorPlan(floorPlanId, {
+      imagePath,
+      referencePoints
     });
   }
 
-  async getReports(projectId) {
-    return this.request(`/projects/${projectId}/reports`);
-  }
-
-  // Database info
   async getDatabaseInfo() {
     return this.request('/database/info');
   }
@@ -120,5 +107,4 @@ class DatabaseAPI {
   }
 }
 
-// Global database instance
 window.dbAPI = new DatabaseAPI();

@@ -77,6 +77,8 @@
   <script>
     (function(){
       let currentFloorPlan = null;
+      let currentFile = null;
+      let uploadedFileUrl = null;
       const fileInput = document.getElementById('fileInput');
       const chooseBtn = document.getElementById('chooseBtn');
       const saveBtn = document.getElementById('saveBtn');
@@ -89,6 +91,9 @@
       fileInput.addEventListener('change', function(e){
         const file = e.target.files && e.target.files[0];
         if (!file) return;
+        currentFile = file;
+        
+        // Show preview using data URL for preview only
         const reader = new FileReader();
         reader.onload = function(ev){
           const url = ev.target.result;
@@ -97,7 +102,6 @@
           fileInfo.textContent = file.name;
           saveBtn.disabled = false;
           nextBtn.style.display = 'none';
-          currentFloorPlan = { id: 'fp-'+Date.now(), fileName: file.name, imageUrl: url };
         };
         reader.readAsDataURL(file);
       });
@@ -112,24 +116,72 @@
         previewArea.appendChild(img);
       }
 
-      saveBtn.addEventListener('click', function(){
-        const url = currentFloorPlan && currentFloorPlan.imageUrl;
-        if (!url) return;
-        const floorPlan = {
-          id: currentFloorPlan.id,
-          fileName: currentFloorPlan.fileName,
-          fileType: (currentFloorPlan.fileName || '').toLowerCase().endsWith('.pdf') ? 'pdf' : 'png',
-          imageUrl: url,
-          width: 1000,
-          height: 700
-        };
-        // send to parent
-        if (window.parent && typeof window.parent.postMessage === 'function') {
-          window.parent.postMessage({ type: 'upload:floorPlanUploaded', floorPlan }, '*');
-          // show next button
-          nextBtn.style.display = 'inline-flex';
-        } else {
-          alert('Parent window not available');
+      saveBtn.addEventListener('click', async function(){
+        if (!currentFile && !uploadedFileUrl) return;
+        
+        try {
+          saveBtn.disabled = true;
+          saveBtn.textContent = 'Uploader...';
+          
+          // Upload file to server if not already uploaded
+          if (currentFile && !uploadedFileUrl) {
+            console.log('📤 Uploading file to server:', currentFile.name);
+            const formData = new FormData();
+            formData.append('file', currentFile);
+            
+            const response = await fetch('/api/upload', {
+              method: 'POST',
+              body: formData
+            });
+            
+            if (!response.ok) {
+              throw new Error('Upload failed: ' + response.statusText);
+            }
+            
+            const result = await response.json();
+            console.log('✅ File uploaded:', result);
+            uploadedFileUrl = result.file?.url || result.url; // Backend returns file.url
+            
+            if (!uploadedFileUrl) {
+              throw new Error('No file URL returned from server');
+            }
+            
+            console.log('📁 File URL:', uploadedFileUrl);
+            
+            // Get image dimensions
+            const img = previewArea.querySelector('img');
+            const width = img.naturalWidth || 1000;
+            const height = img.naturalHeight || 700;
+            
+            const floorPlan = {
+              id: 'fp-' + Date.now(),
+              fileName: currentFile.name,
+              fileType: currentFile.type || 'image/png',
+              imageUrl: uploadedFileUrl,
+              imagePath: uploadedFileUrl,
+              width: width,
+              height: height
+            };
+            
+            console.log('📋 Sending floor plan to parent:', floorPlan);
+            
+            // send to parent
+            if (window.parent && typeof window.parent.postMessage === 'function') {
+              window.parent.postMessage({ type: 'upload:floorPlanUploaded', floorPlan }, '*');
+              // show next button
+              nextBtn.style.display = 'inline-flex';
+              saveBtn.textContent = 'Gemt ✓';
+            } else {
+              alert('Parent window not available');
+              saveBtn.disabled = false;
+              saveBtn.textContent = 'Gem plantegning';
+            }
+          }
+        } catch (error) {
+          console.error('❌ Upload error:', error);
+          alert('Fejl ved upload: ' + error.message);
+          saveBtn.disabled = false;
+          saveBtn.textContent = 'Gem plantegning';
         }
       });
 
@@ -143,7 +195,14 @@
       window.addEventListener('message', function(ev){
         try {
           const msg = ev.data || {};
+          console.log('📮 UploadCalibration received message:', msg.type);
           if (msg && msg.type === 'upload:setFloorPlan') {
+            console.log('  - Floor plan:', msg.floorPlan ? 'EXISTS' : 'NULL');
+            if (msg.floorPlan) {
+              console.log('  - imageUrl:', msg.floorPlan.imageUrl);
+              console.log('  - width:', msg.floorPlan.width);
+              console.log('  - height:', msg.floorPlan.height);
+            }
             const fp = msg.floorPlan;
             if (!fp) {
               // clear

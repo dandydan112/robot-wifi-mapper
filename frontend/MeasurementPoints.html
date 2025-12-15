@@ -15,12 +15,51 @@
     .card-content { padding: 16px; }
     .muted { color:#6b7280; }
     .dot { width:18px; height:18px; border-radius:50%; border:2px solid white; box-shadow:0 1px 3px rgba(0,0,0,0.2); position:absolute; transform:translate(-50%,-50%); cursor:pointer; }
+    .dot.scanning { animation: pulse 1.5s ease-in-out infinite; background: #3b82f6 !important; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+      50% { opacity: 0.5; transform: translate(-50%,-50%) scale(1.2); }
+    }
     .modal { position:fixed; left:0; right:0; top:0; bottom:0; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center; }
     .modal .panel { background:white; padding:16px; border-radius:8px; width:320px; }
     table { width:100%; border-collapse:collapse; }
     td, th { padding:8px; border-bottom:1px solid #eee; font-size:14px; }
     .btn { padding:6px 10px; border-radius:6px; cursor:pointer; }
     .btn-ghost { background:transparent; border:1px solid #e5e7eb; }
+    .scanning-notice { 
+      background: #eff6ff; 
+      border: 1px solid #3b82f6; 
+      border-radius: 6px; 
+      padding: 12px; 
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .spinner {
+      border: 2px solid #e5e7eb;
+      border-top-color: #3b82f6;
+      border-radius: 50%;
+      width: 16px;
+      height: 16px;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .layout-grid { display:flex; gap:16px; }
+    .sidebar { width:280px; }
+    .scanning-text { font-weight:500; color:#1e40af; }
+    .scanning-subtext { font-size:12px; color:#60a5fa; margin-top:4px; }
+    .mb-12 { margin-bottom:12px; }
+    .scrollable-content { max-height:300px; overflow:auto; }
+    .main-content { flex:1; }
+    .map-area { position:relative; }
+    .map-placeholder { border:1px dashed #cbd5e1; border-radius:6px; height:480px; display:flex; align-items:center; justify-content:center; }
+    .placeholder-text { text-align:center; color:#9ca3af; }
+    .mt-8 { margin-top:8px; }
+    .input-field { width:100%; padding:6px; margin-top:6px; }
+    .modal-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:12px; }
   </style>
 </head>
 <body>
@@ -30,9 +69,17 @@
       <p class="muted">Klik på kortet for at tilføje målepunkter</p>
     </div>
 
-    <div class="grid lg:grid-cols-3" style="display:flex; gap:16px;">
-      <div style="width:280px;">
-        <div class="card" style="margin-bottom:12px;">
+    <div class="grid lg:grid-cols-3 layout-grid">
+      <div class="sidebar">
+        <div id="scanningNotice" class="scanning-notice" style="display:none;">
+          <div class="spinner"></div>
+          <div>
+            <div class="scanning-text">Scanner WiFi-netværk...</div>
+            <div class="scanning-subtext">Dette kan tage 10-15 sekunder</div>
+          </div>
+        </div>
+
+        <div class="card mb-12">
           <div class="card-header"><strong>Statistik</strong></div>
           <div class="card-content">
             <div>Totale målepunkter: <strong id="totalCount">0</strong></div>
@@ -43,7 +90,7 @@
 
         <div class="card">
           <div class="card-header"><strong>Målepunkter oversigt</strong></div>
-          <div class="card-content" style="max-height:300px; overflow:auto;">
+          <div class="card-content scrollable-content">
             <table id="pointsTable">
               <thead><tr><th>Pos</th><th>Signal</th><th>SSID</th><th></th></tr></thead>
               <tbody><tr><td colspan="4" class="muted">Ingen målepunkter endnu.</td></tr></tbody>
@@ -52,12 +99,12 @@
         </div>
       </div>
 
-      <div style="flex:1;">
+      <div class="main-content">
         <div class="card">
           <div class="card-header"><strong>Interaktivt kort</strong><div class="muted">Klik for at tilføje nye målepunkter</div></div>
-          <div class="card-content" id="mapArea" style="position:relative;">
-            <div id="mapPlaceholder" style="border:1px dashed #cbd5e1; border-radius:6px; height:480px; display:flex; align-items:center; justify-content:center;">
-              <div style="text-align:center; color:#9ca3af;">Upload en plantegning først</div>
+          <div class="card-content map-area" id="mapArea">
+            <div id="mapPlaceholder" class="map-placeholder">
+              <div class="placeholder-text">Upload en plantegning først</div>
             </div>
           </div>
         </div>
@@ -68,19 +115,19 @@
   <div id="modal" style="display:none;" class="modal">
     <div class="panel">
       <h3 id="modalTitle">Tilføj målepunkt</h3>
-      <div style="margin-top:8px;">
+      <div class="mt-8">
         <label>Signalstyrke (dBm)</label>
-        <input id="inSignal" type="number" value="-60" style="width:100%; padding:6px; margin-top:6px;" />
+        <input id="inSignal" type="number" value="-60" class="input-field" />
       </div>
-      <div style="margin-top:8px;">
+      <div class="mt-8">
         <label>SSID</label>
-        <input id="inSsid" style="width:100%; padding:6px; margin-top:6px;" />
+        <input id="inSsid" class="input-field" />
       </div>
-      <div style="margin-top:8px;">
+      <div class="mt-8">
         <label>BSSID</label>
-        <input id="inBssid" style="width:100%; padding:6px; margin-top:6px;" />
+        <input id="inBssid" class="input-field" />
       </div>
-      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px;">
+      <div class="modal-actions">
         <button id="cancelBtn" class="btn btn-ghost">Annuller</button>
         <button id="saveBtn" class="btn">Gem</button>
       </div>
@@ -92,6 +139,8 @@
       let floorPlan = null;
       let measurements = [];
       let selectedPoint = null;
+      // Track points being scanned (temp ids) and which measurement is highlighted
+      let pendingScans = new Set(); // Track points being scanned
       let highlightedMeasurementId = null;
       const mapArea = document.getElementById('mapArea');
       const mapPlaceholder = document.getElementById('mapPlaceholder');
@@ -101,6 +150,7 @@
       const pointsTable = document.querySelector('#pointsTable tbody');
       const readingListEl = document.getElementById('readingList');
       const modal = document.getElementById('modal');
+      const scanningNotice = document.getElementById('scanningNotice');
       const inSignal = document.getElementById('inSignal');
       const inSsid = document.getElementById('inSsid');
       const inBssid = document.getElementById('inBssid');
@@ -115,7 +165,14 @@
           return;
         }
         const img = document.createElement('img');
-        img.src = floorPlan.imageUrl;
+        // Convert relative URL to backend absolute URL
+        let imgUrl = floorPlan.imageUrl;
+        if (imgUrl && imgUrl.startsWith('/')) {
+          const protocol = window.location.protocol;
+          const hostname = window.location.hostname;
+          imgUrl = `${protocol}//${hostname}:4000${imgUrl}`;
+        }
+        img.src = imgUrl;
         img.style.width = '100%';
         img.style.height = 'auto';
         img.style.display = 'block';
@@ -136,23 +193,74 @@
             const clickY = e.clientY - rect.top;
             const x = (clickX / displayedWidth) * originalWidth;
             const y = (clickY / displayedHeight) * originalHeight;
+            console.log('[MeasurementPoints] Click:', { 
+              clickX, clickY, 
+              displayedWidth, displayedHeight,
+              originalWidth, originalHeight,
+              finalX: x, finalY: y 
+            });
             postAutoAdd({ x, y, name: null });
           });
 
-          // add markers - convert from original coordinates to display coordinates
-          measurements.forEach(m => {
+          // Group measurements by coordinate and add one marker per group
+          const grouped = groupMeasurementsByCoordinate(measurements);
+          grouped.forEach(group => {
+            const count = group.measurements.length;
+            const avgSignal = count > 0 ? group.measurements.reduce((a,b)=>a+(b.signalStrength||0),0)/count : 0;
+            
             const dot = document.createElement('div');
             dot.className = 'dot';
-            const displayX = (m.x / originalWidth) * displayedWidth;
-            const displayY = (m.y / originalHeight) * displayedHeight;
+            const displayX = (group.x / originalWidth) * displayedWidth;
+            const displayY = (group.y / originalHeight) * displayedHeight;
+            console.log('[MeasurementPoints] Render dot:', {
+              originalX: group.x, originalY: group.y,
+              originalWidth, originalHeight,
+              displayedWidth, displayedHeight,
+              displayX, displayY
+            });
             dot.style.left = displayX + 'px';
             dot.style.top = displayY + 'px';
-            dot.style.background = (typeof m.signalStrength === 'number' && m.signalStrength >= -60) ? '#22c55e' : ((typeof m.signalStrength === 'number' && m.signalStrength >= -70) ? '#eab308' : '#ef4444');
-            dot.title = (m.signalStrength !== null && m.signalStrength !== undefined) ? (m.signalStrength + ' dBm') : '';
-            dot.addEventListener('click', function(ev){ ev.stopPropagation(); openModal('edit', m); });
             
-            // Add highlight ring if this measurement is highlighted
-            if (highlightedMeasurementId !== null && m.id === highlightedMeasurementId) {
+            // Check if any point in this group is currently being scanned
+            const isScanning = group.measurements.some(m => pendingScans.has(m.id));
+            if (isScanning) {
+              dot.classList.add('scanning');
+              dot.title = 'Scanner WiFi-netværk...';
+            } else {
+              dot.style.background = (avgSignal >= -60) ? '#22c55e' : ((avgSignal >= -70) ? '#eab308' : '#ef4444');
+              dot.title = `${count} netværk (Ø ${Math.round(avgSignal)} dBm)`;
+            }
+            
+            // Add badge showing count if more than 1 network
+            if (count > 1 && !isScanning) {
+              const badge = document.createElement('div');
+              badge.style.position = 'absolute';
+              badge.style.top = '-6px';
+              badge.style.right = '-6px';
+              badge.style.background = '#1e40af';
+              badge.style.color = 'white';
+              badge.style.borderRadius = '50%';
+              badge.style.width = '16px';
+              badge.style.height = '16px';
+              badge.style.fontSize = '10px';
+              badge.style.fontWeight = 'bold';
+              badge.style.display = 'flex';
+              badge.style.alignItems = 'center';
+              badge.style.justifyContent = 'center';
+              badge.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
+              badge.textContent = count > 99 ? '99+' : count;
+              dot.appendChild(badge);
+            }
+            
+            dot.addEventListener('click', function(ev){ 
+              ev.stopPropagation(); 
+              // Could open a modal showing all networks at this location
+              // For now, just open edit modal for first measurement
+              openModal('edit', group.measurements[0]); 
+            });
+            
+            // Add highlight ring if any measurement in this group is highlighted
+            if (highlightedMeasurementId !== null && group.measurements.some(m => m.id === highlightedMeasurementId)) {
               const ring1 = document.createElement('div');
               ring1.style.position = 'absolute';
               ring1.style.left = displayX + 'px';
@@ -186,9 +294,132 @@
       }
 
       function renderStats() {
-        totalCount.textContent = String(measurements.length);
+        // Group measurements by coordinate to get accurate counts
+        const grouped = groupMeasurementsByCoordinate(measurements);
+        totalCount.textContent = String(grouped.length);
         avgSignal.textContent = measurements.length > 0 ? String(Math.round(measurements.reduce((a,b)=>a+b.signalStrength,0)/measurements.length)) : '0';
-        uniqueSsids.textContent = String(new Set(measurements.map(m=>m.ssid)).size);
+        uniqueSsids.textContent = String(new Set(measurements.map(m=>m.ssid).filter(s => s && s !== '<redacted>')).size);
+      }
+
+      // Group measurements by coordinate (same X, Y position)
+      function groupMeasurementsByCoordinate(measurements) {
+        const groups = {};
+        measurements.forEach(m => {
+          const key = `${Math.round(m.x)}_${Math.round(m.y)}`;
+          if (!groups[key]) {
+            groups[key] = {
+              x: m.x,
+              y: m.y,
+              measurements: []
+            };
+          }
+          groups[key].measurements.push(m);
+        });
+        return Object.values(groups);
+      }
+      function notifyParentOfPointDeletion(measurementPointIds = [], tempMeasurementIds = []) {
+        const ids = Array.isArray(measurementPointIds) ? measurementPointIds : [measurementPointIds];
+        const tempIds = Array.isArray(tempMeasurementIds) ? tempMeasurementIds : [tempMeasurementIds];
+        if (window.parent && typeof window.parent.postMessage === 'function') {
+          window.parent.postMessage({
+            type: 'measurement:deletePoints',
+            measurementPointIds: ids.filter(id => id !== undefined && id !== null && String(id).trim() !== ''),
+            tempMeasurementIds: tempIds.filter(id => id !== undefined && id !== null && String(id).trim() !== '')
+          }, '*');
+        }
+      }
+
+      async function deleteMeasurementPoint(measurementPointId, options = {}) {
+        const { skipConfirm = false, skipRerender = false } = options;
+
+        const targetId = String(measurementPointId ?? '').trim();
+        if (!targetId) {
+          console.error('❌ No measurementPointId provided');
+          alert('Kunne ikke finde målepunktets ID.');
+          return false;
+        }
+
+        if (!skipConfirm) {
+          const confirmed = confirm('Er du sikker på at du vil slette dette målepunkt og alle tilhørende WiFi-målinger?');
+          if (!confirmed) {
+            return false;
+          }
+        }
+
+        notifyParentOfPointDeletion([targetId]);
+
+        const before = measurements.length;
+        measurements = measurements.filter(m => String(m.measurementPointId) !== targetId);
+        pendingScans.delete(targetId);
+
+        if (!skipRerender && measurements.length !== before) {
+          renderMap();
+          renderStats();
+          renderTable();
+          renderReadingsList();
+        }
+
+        return true;
+      }
+
+      async function deleteMeasurementGroup(group) {
+        if (!group || !Array.isArray(group.measurements) || group.measurements.length === 0) {
+          alert('Der findes ingen målinger at slette for dette punkt.');
+          return;
+        }
+
+        const persistedIds = Array.from(new Set(group.measurements
+          .map(m => m && m.measurementPointId)
+          .filter(id => id !== undefined && id !== null && String(id).trim() !== '' && !String(id).startsWith('temp-'))));
+
+        const tempIds = group.measurements
+          .filter(m => (!m || !m.measurementPointId) && m?.id)
+          .map(m => m.id);
+
+        if (persistedIds.length === 0 && tempIds.length === 0) {
+          alert('Der blev ikke fundet nogen gemte målepunkter ved disse koordinater.');
+          return;
+        }
+
+        const coordLabel = `(${Math.round(group.x)}, ${Math.round(group.y)})`;
+        const totalCount = persistedIds.length + tempIds.length;
+        const message = totalCount > 1
+          ? `Er du sikker på at du vil slette alle ${totalCount} målepunkter ved koordinatet ${coordLabel}?`
+          : `Er du sikker på at du vil slette målepunktet ved koordinatet ${coordLabel}?`;
+
+        if (!confirm(message)) {
+          return;
+        }
+
+        notifyParentOfPointDeletion(persistedIds, tempIds);
+
+        if (tempIds.length > 0) {
+          tempIds.forEach(id => {
+            postDelete(id);
+            pendingScans.delete(id);
+          });
+        }
+
+        const persistedSet = new Set(persistedIds.map(id => String(id)));
+        const tempSet = new Set(tempIds.map(id => String(id)));
+        const beforeLength = measurements.length;
+        measurements = measurements.filter(m => {
+          const mpId = String(m?.measurementPointId ?? '');
+          if (tempSet.has(String(m.id))) return false;
+          if (mpId && persistedSet.has(mpId)) return false;
+          return true;
+        });
+
+        group.measurements.forEach(m => {
+          if (m && m.id) pendingScans.delete(m.id);
+        });
+
+        if (measurements.length !== beforeLength) {
+          renderMap();
+          renderStats();
+          renderTable();
+          renderReadingsList();
+        }
       }
 
       function renderTable() {
@@ -197,30 +428,160 @@
           const tr = document.createElement('tr');
           const td = document.createElement('td'); td.colSpan = 4; td.className = 'muted'; td.textContent = 'Ingen målepunkter endnu.'; tr.appendChild(td); pointsTable.appendChild(tr); return;
         }
-        measurements.forEach(m => {
+
+        // Group measurements by coordinate
+        const grouped = groupMeasurementsByCoordinate(measurements);
+
+        grouped.forEach((group, groupIdx) => {
+          const count = group.measurements.length;
+          const avgSignal = Math.round(group.measurements.reduce((a,b)=>a+(b.signalStrength||0),0)/count);
+          
+          // Main row for the coordinate group
           const tr = document.createElement('tr');
           tr.style.cursor = 'pointer';
+          tr.style.background = '#f8fafc';
           
-          // Hover highlighting
+          // Highlight all measurements in this group on hover
           tr.addEventListener('mouseenter', () => {
-            tr.style.background = '#f8fafc';
-            highlightedMeasurementId = m.id;
+            tr.style.background = '#e0f2fe';
+            // Highlight first measurement in group
+            highlightedMeasurementId = group.measurements[0].id;
             renderMap();
           });
           tr.addEventListener('mouseleave', () => {
-            tr.style.background = 'transparent';
+            tr.style.background = '#f8fafc';
             highlightedMeasurementId = null;
             renderMap();
           });
           
-          const pos = document.createElement('td'); pos.textContent = `(${Math.round(m.x)}, ${Math.round(m.y)})`; tr.appendChild(pos);
-          const sig = document.createElement('td'); sig.textContent = m.signalStrength + ' dBm'; tr.appendChild(sig);
-          const ssid = document.createElement('td'); ssid.textContent = m.ssid; tr.appendChild(ssid);
+          const pos = document.createElement('td'); 
+          pos.textContent = `(${Math.round(group.x)}, ${Math.round(group.y)})`;
+          pos.style.fontWeight = '600';
+          tr.appendChild(pos);
+          
+          const sig = document.createElement('td'); 
+          sig.textContent = `${avgSignal} dBm`;
+          sig.style.fontWeight = '600';
+          tr.appendChild(sig);
+          
+          const ssidCell = document.createElement('td'); 
+          ssidCell.textContent = `${count} netværk`;
+          ssidCell.style.fontWeight = '600';
+          ssidCell.style.color = '#3b82f6';
+          tr.appendChild(ssidCell);
+          
           const actions = document.createElement('td');
-          const editBtn = document.createElement('button'); editBtn.className='btn btn-ghost'; editBtn.textContent='Edit'; editBtn.addEventListener('click', ()=>openModal('edit', m));
-          const delBtn = document.createElement('button'); delBtn.className='btn btn-ghost'; delBtn.textContent='Delete'; delBtn.addEventListener('click', ()=>{ if(confirm('Slet?')) { postDelete(m.id); } });
-          actions.appendChild(editBtn); actions.appendChild(delBtn); tr.appendChild(actions);
+          actions.style.display = 'flex';
+          actions.style.gap = '8px';
+          actions.style.alignItems = 'center';
+          
+          const toggleBtn = document.createElement('button'); 
+          toggleBtn.className='btn btn-ghost'; 
+          toggleBtn.textContent = '▼';
+          toggleBtn.style.fontSize = '12px';
+          toggleBtn.dataset.groupId = 'group-' + groupIdx;
+          actions.appendChild(toggleBtn);
+          
+          const deleteBtn = document.createElement('button');
+          deleteBtn.className = 'btn btn-ghost';
+          deleteBtn.textContent = '×';
+          deleteBtn.style.fontSize = '20px';
+          deleteBtn.style.fontWeight = 'bold';
+          deleteBtn.style.color = '#ef4444';
+          deleteBtn.style.lineHeight = '1';
+          deleteBtn.title = 'Slet målepunkt';
+          deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteMeasurementGroup(group);
+          });
+          actions.appendChild(deleteBtn);
+          
+          tr.appendChild(actions);
+          
           pointsTable.appendChild(tr);
+
+          // Create collapsible container for readings
+          const detailsRow = document.createElement('tr');
+          detailsRow.id = 'group-' + groupIdx;
+          detailsRow.style.display = 'none';
+          
+          const detailsCell = document.createElement('td');
+          detailsCell.colSpan = 4;
+          detailsCell.style.background = '#ffffff';
+          detailsCell.style.padding = '0';
+          
+          const detailsTable = document.createElement('table');
+          detailsTable.style.width = '100%';
+          detailsTable.style.fontSize = '13px';
+          
+          // Sort readings by signal strength (strongest first)
+          const sortedReadings = [...group.measurements].sort((a, b) => (b.signalStrength || -100) - (a.signalStrength || -100));
+          
+          sortedReadings.forEach(m => {
+            const subTr = document.createElement('tr');
+            subTr.style.background = '#fafafa';
+            
+            const indicator = document.createElement('td');
+            indicator.style.width = '10px';
+            indicator.style.paddingLeft = '20px';
+            indicator.textContent = '└';
+            indicator.style.color = '#cbd5e1';
+            subTr.appendChild(indicator);
+            
+            const subSig = document.createElement('td'); 
+            subSig.textContent = (m.signalStrength || 0) + ' dBm';
+            // Color code based on strength
+            if (m.signalStrength >= -60) subSig.style.color = '#22c55e';
+            else if (m.signalStrength >= -70) subSig.style.color = '#eab308';
+            else subSig.style.color = '#ef4444';
+            subTr.appendChild(subSig);
+            
+            const subSsid = document.createElement('td'); 
+            subSsid.textContent = m.ssid || '<redacted>';
+            if (!m.ssid || m.ssid === '<redacted>') {
+              subSsid.style.fontStyle = 'italic';
+              subSsid.style.color = '#9ca3af';
+              if (m.bssid) {
+                subSsid.textContent = m.bssid;
+                subSsid.style.fontFamily = 'monospace';
+              }
+            }
+            subTr.appendChild(subSsid);
+            
+            const subActions = document.createElement('td');
+            const delBtn = document.createElement('button'); 
+            delBtn.className='btn btn-ghost'; 
+            delBtn.textContent='×'; 
+            delBtn.style.fontSize = '16px';
+            delBtn.style.padding = '2px 6px';
+            delBtn.addEventListener('click', ()=>{ 
+              if(confirm('Slet denne måling?')) { 
+                postDelete(m.id); 
+              } 
+            });
+            subActions.appendChild(delBtn);
+            subTr.appendChild(subActions);
+            
+            detailsTable.appendChild(subTr);
+          });
+          
+          detailsCell.appendChild(detailsTable);
+          detailsRow.appendChild(detailsCell);
+          pointsTable.appendChild(detailsRow);
+
+          // Toggle handler
+          toggleBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const targetId = toggleBtn.dataset.groupId;
+            const detailsRow = document.getElementById(targetId);
+            if (detailsRow.style.display === 'none') {
+              detailsRow.style.display = 'table-row';
+              toggleBtn.textContent = '▲';
+            } else {
+              detailsRow.style.display = 'none';
+              toggleBtn.textContent = '▼';
+            }
+          });
         });
       }
 
@@ -248,6 +609,7 @@
           const ssid = m.ssid || (m.readings && m.readings[0] && m.readings[0].ssid) || '';
           const bssid = m.bssid || (m.readings && m.readings[0] && (m.readings[0].bssid || m.readings[0].mac)) || '';
           const freq = (m.frequency || (m.readings && m.readings[0] && m.readings[0].frequency)) || null;
+          const channel = (m.channel || (m.readings && m.readings[0] && m.readings[0].channel)) || null;
           const ts = m.timestamp ? (new Date(m.timestamp)).toLocaleString() : (m.createdAt ? (new Date(m.createdAt)).toLocaleString() : '');
 
           const row = document.createElement('div');
@@ -273,7 +635,23 @@
           const title = document.createElement('div');
           title.style.fontWeight = '700';
           title.style.marginBottom = '3px';
-          title.textContent = ssid || bssid || ('MP ' + (m.id || '?'));
+          
+          // If SSID is redacted or missing, show BSSID or a placeholder, but don't just say "redacted" if we have other info
+          let displayTitle = ssid;
+          if (!displayTitle || displayTitle === '<redacted>') {
+             if (bssid) {
+               displayTitle = `[${bssid}]`;
+             } else {
+               displayTitle = 'Unknown Network';
+             }
+          }
+          title.textContent = displayTitle;
+          
+          if (ssid === '<redacted>' || !ssid) {
+             title.style.fontStyle = 'italic';
+             title.style.color = '#6b7280';
+             title.title = 'SSID hidden by OS privacy settings';
+          }
 
           const details = document.createElement('div');
           details.style.fontSize = '12px';
@@ -302,17 +680,22 @@
 
           const rssiSpan = document.createElement('span');
           rssiSpan.textContent = `RSSI: ${sig !== null ? sig + ' dBm' : 'N/A'}`;
+          rssiSpan.title = 'Signal Strength';
 
           const coordSpan = document.createElement('span');
-          coordSpan.textContent = `x:${Math.round(m.x)}, y:${Math.round(m.y)}`;
+          coordSpan.textContent = `Pos: (${Math.round(m.x)}, ${Math.round(m.y)})`;
 
           const bssidSpan = document.createElement('span');
-          bssidSpan.textContent = bssid ? `${bssid}` : '';
+          bssidSpan.textContent = bssid ? `BSSID: ${bssid}` : '';
           bssidSpan.style.opacity = bssid ? '1' : '0.6';
           bssidSpan.style.fontSize = '12px';
+          bssidSpan.style.fontFamily = 'monospace';
 
           const freqSpan = document.createElement('span');
-          if (freq) freqSpan.textContent = `${freq} MHz`;
+          if (freq) freqSpan.textContent = `Freq: ${freq} MHz`;
+          
+          const channelSpan = document.createElement('span');
+          if (channel) channelSpan.textContent = `Ch: ${channel}`;
 
           const tsSpan = document.createElement('span');
           tsSpan.textContent = ts;
@@ -324,8 +707,9 @@
           details.appendChild(idBadge);
           if (m.parentId) details.appendChild(parentBadge);
           details.appendChild(rssiSpan);
-          details.appendChild(coordSpan);
+          if (channel) details.appendChild(channelSpan);
           if (freq) details.appendChild(freqSpan);
+          details.appendChild(coordSpan);
           if (bssid) details.appendChild(bssidSpan);
 
           content.appendChild(title);
@@ -410,6 +794,15 @@
       // Used for auto-adding points: send only coordinates (name optional).
       function postAutoAdd(measurement) {
         if (window.parent && typeof window.parent.postMessage === 'function') {
+          // Generate temporary ID for tracking
+          const tempId = 'temp-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+          measurement.id = tempId;
+          
+          // Mark as pending scan
+          pendingScans.add(tempId);
+          updateScanningNotice();
+          renderMap(); // Re-render to show scanning state
+          
           // send minimal payload; backend will schedule scan
           window.parent.postMessage({ type: 'measurement:add', measurement }, '*');
         }
@@ -425,15 +818,46 @@
         }
       }
 
+      function updateScanningNotice() {
+        if (pendingScans.size > 0) {
+          scanningNotice.style.display = 'flex';
+        } else {
+          scanningNotice.style.display = 'none';
+        }
+      }
+
       // Listen for messages from parent
       window.addEventListener('message', function(ev){
         try {
           const msg = ev.data || {};
+          console.log('📍 MeasurementPoints received message:', msg.type);
           if (msg.type === 'measurements:set') {
-            measurements = Array.isArray(msg.measurements) ? msg.measurements : [];
+            console.log('  - Measurements:', msg.measurements?.length || 0);
+            if (msg.measurements?.length > 0) {
+              console.log('  - First measurement:', msg.measurements[0]);
+            }
+            const newMeasurements = Array.isArray(msg.measurements) ? msg.measurements : [];
+
+            // Clear pending scans for measurements that now have real data
+            newMeasurements.forEach(m => {
+              if (m && m.id && (m.signalStrength !== null && m.signalStrength !== undefined)) {
+                pendingScans.delete(m.id);
+                // Remove any temporary pending IDs (best-effort cleanup)
+                Array.from(pendingScans).forEach(pid => {
+                  if (String(pid).startsWith('temp-')) pendingScans.delete(pid);
+                });
+              }
+            });
+
+            measurements = newMeasurements;
+            updateScanningNotice();
             renderMap(); renderStats(); renderTable(); renderReadingsList();
           }
           if (msg.type === 'measurements:setFloorPlan') {
+            console.log('  - Floor plan:', msg.floorPlan ? 'EXISTS' : 'NULL');
+            if (msg.floorPlan) {
+              console.log('  - imageUrl:', msg.floorPlan.imageUrl);
+            }
             floorPlan = msg.floorPlan || null;
             renderMap();
           }
