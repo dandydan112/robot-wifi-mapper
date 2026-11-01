@@ -1,4 +1,4 @@
-##Video Demonstration
+## Video Demonstration
 
 [![Watch video demonstration](images/video-thumbnail.png)](https://youtu.be/nIEP0k_DblE)
 
