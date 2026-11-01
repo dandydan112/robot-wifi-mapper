@@ -1,5 +1,7 @@
-[![Video demonstration](https://img.youtube.com/vi/nIEP0k_DblE/0.jpg)](https://youtu.be/nIEP0k_DblE)
+##Video Demonstration
+[![Watch video demonstration](images/video-thumbnail.png)](https://youtu.be/nIEP0k_DblE)
 
+[▶ Watch video demonstration on YouTube](https://youtu.be/nIEP0k_DblE)
 ## Result:
 ![Image description](images/DemoImage.png)
 
