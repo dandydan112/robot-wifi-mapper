@@ -1,3 +1,5 @@
+[![Video demonstration](https://img.youtube.com/vi/nIEP0k_DblE/0.jpg)](https://youtu.be/nIEP0k_DblE)
+
 ## Quickstart:
 ### Prerequisites
 - Node.js installed
