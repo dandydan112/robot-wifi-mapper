@@ -1,4 +1,5 @@
 ##Video Demonstration
+
 [![Watch video demonstration](images/video-thumbnail.png)](https://youtu.be/nIEP0k_DblE)
 
 [▶ Watch video demonstration on YouTube](https://youtu.be/nIEP0k_DblE)
